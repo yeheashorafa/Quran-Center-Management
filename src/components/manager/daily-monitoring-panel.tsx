@@ -124,6 +124,43 @@ export function DailyMonitoringPanel({
         ) : null}
       </section>
 
+      {/* Unrecorded Halaqat Priority Alert Box */}
+      {data.summary.notRecordedHalaqat > 0 ? (
+        <section className="rounded-3xl border-2 border-red-200 bg-red-50/70 p-4 shadow-sm sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="flex size-9 items-center justify-center rounded-2xl bg-red-100 text-red-800 text-lg">
+                ⚠️
+              </span>
+              <div>
+                <h3 className="text-base font-black text-red-950">
+                  تنبيه: يوجد ({data.summary.notRecordedHalaqat}) حلقة لم تسجّل التسميع لهذا اليوم!
+                </h3>
+                <p className="mt-0.5 text-xs font-bold text-red-800">
+                  نرجو التواصل مع الشيوخ المسؤولين لتسجيل الجلسة وإتمام الاعتماد.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="rounded-3xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm sm:p-5">
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-900 text-lg">
+              🎉
+            </span>
+            <div>
+              <h3 className="text-base font-black text-emerald-950">
+                ممتاز! جميع الحلقات المجدولة اليوم قامت بالتسجيل المكتمل.
+              </h3>
+              <p className="mt-0.5 text-xs font-bold text-emerald-800">
+                نسبة التغطية والتسجيل اليومية بلغت 100%.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
         <MetricCard value={data.summary.expectedHalaqat} label="حلقة مطلوبة" />
         <MetricCard value={data.summary.recordedHalaqat} label="بدأت التسجيل" />

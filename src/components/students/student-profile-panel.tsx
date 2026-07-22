@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { ParentReportSelector } from "@/components/reports/parent-report-selector";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import type { StudentProfileData } from "@/lib/students/types";
 
 type ApiMessage = { message?: string };
@@ -23,6 +25,20 @@ function todayInputValue(): string {
   return `${year}-${month}-${day}`;
 }
 
+function addDaysToDateInput(value: string, days: number): string {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function createIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `transfer-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 async function readApiMessage(response: Response): Promise<string> {
   const data = (await response.json().catch(() => ({}))) as ApiMessage;
   return data.message || (response.ok ? "تمت العملية بنجاح." : "تعذر تنفيذ العملية.");
@@ -32,6 +48,26 @@ export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
   const router = useRouter();
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  const [transferOperationKey, setTransferOperationKey] = useState(createIdempotencyKey);
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmText?: string;
+    variant?: "danger" | "warning" | "info";
+    onConfirm: () => Promise<void> | void;
+  } | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const transferTargets = data.activeEnrollment
+    ? data.availableHalaqat.filter(
+        (halaqa) => halaqa.id !== data.activeEnrollment?.halaqa.id,
+      )
+    : [];
+  const minimumTransferDate = data.activeEnrollment
+    ? addDaysToDateInput(data.activeEnrollment.startedOn, 1)
+    : todayInputValue();
+  const defaultTransferDate =
+    minimumTransferDate > todayInputValue() ? minimumTransferDate : todayInputValue();
 
   function showNotice(type: "success" | "error", text: string) {
     setNotice({ type, text });
@@ -119,6 +155,60 @@ export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
     }
   }
 
+  async function transferStudent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!data.activeEnrollment) return;
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const toHalaqaId = String(formData.get("toHalaqaId") || "");
+    const target = transferTargets.find((halaqa) => halaqa.id === toHalaqaId);
+    if (!target) {
+      showNotice("error", "اختر الحلقة الجديدة.");
+      return;
+    }
+
+    const transferDate = String(formData.get("transferDate") || "");
+    const note = formData.get("note");
+
+    setConfirmState({
+      isOpen: true,
+      title: "تأكيد نقل الطالب",
+      description: `هل تريد نقل الطالب (${data.student.displayName}) من حلقة (${data.activeEnrollment.halaqa.nameAr}) إلى حلقة (${target.nameAr}) ابتداءً من تاريخ ${transferDate}؟`,
+      confirmText: "نقل الطالب",
+      variant: "warning",
+      onConfirm: async () => {
+        setConfirmLoading(true);
+        setBusyKey("transfer");
+        setNotice(null);
+
+        try {
+          const response = await fetch(`/api/manager/students/${data.student.id}/transfer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              toHalaqaId,
+              transferDate,
+              note,
+              idempotencyKey: transferOperationKey,
+            }),
+          });
+          const message = await readApiMessage(response);
+          if (!response.ok) throw new Error(message);
+          setTransferOperationKey(createIdempotencyKey());
+          showNotice("success", message);
+          router.refresh();
+        } catch (error) {
+          showNotice("error", error instanceof Error ? error.message : "تعذر نقل الطالب.");
+        } finally {
+          setBusyKey(null);
+          setConfirmLoading(false);
+          setConfirmState(null);
+        }
+      },
+    });
+  }
+
   return (
     <div className="space-y-5">
       {notice ? (
@@ -133,6 +223,20 @@ export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
           {notice.text}
         </div>
       ) : null}
+
+      <ParentReportSelector
+        title={`تقرير ولي الأمر للطالب (${data.student.displayName})`}
+        description="استخرج تقرير المتابعة الخاص بالطالب لشهر محدد وجاهز للطباعة."
+        students={[
+          {
+            id: data.student.id,
+            displayName: data.student.displayName,
+            halaqaName: data.activeEnrollment?.halaqa.nameAr,
+            stageName: data.activeEnrollment?.halaqa.stageName,
+          },
+        ]}
+        defaultStudentId={data.student.id}
+      />
 
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <SummaryCard value={data.summary.attendanceRecords} label="سجل تسميع" />
@@ -270,6 +374,75 @@ export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
             </button>
           </section>
 
+          {data.activeEnrollment && data.student.isActive ? (
+            <section className="rounded-3xl border border-amber-200 bg-white p-4 shadow-sm sm:p-5">
+              <p className="text-xs font-bold text-amber-700">تغيير الحلقة</p>
+              <h2 className="mt-1 text-xl font-black text-slate-950">نقل الطالب</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                يبدأ التسجيل الجديد في التاريخ المحدد، وينتهي التسجيل الحالي في اليوم السابق.
+                تبقى جميع جلسات التسميع والاختبارات والسجلات القديمة مرتبطة بملف الطالب نفسه.
+              </p>
+
+              <form className="mt-4 space-y-4" onSubmit={transferStudent}>
+                <div>
+                  <label className="form-label" htmlFor="profile-transfer-halaqa">الحلقة الجديدة</label>
+                  <select
+                    className="form-control"
+                    id="profile-transfer-halaqa"
+                    name="toHalaqaId"
+                    defaultValue=""
+                    required
+                  >
+                    <option value="">-- اختر الحلقة الجديدة --</option>
+                    {transferTargets.map((halaqa) => (
+                      <option key={halaqa.id} value={halaqa.id}>
+                        {halaqa.stageName} — {halaqa.nameAr}
+                        {halaqa.teacherName ? ` — ${halaqa.teacherName}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label" htmlFor="profile-transfer-date">تاريخ بدء الحلقة الجديدة</label>
+                  <input
+                    className="form-control"
+                    id="profile-transfer-date"
+                    name="transferDate"
+                    type="date"
+                    min={minimumTransferDate}
+                    max={todayInputValue()}
+                    defaultValue={defaultTransferDate}
+                    required
+                  />
+                  {minimumTransferDate > todayInputValue() ? (
+                    <p className="mt-2 text-xs font-bold text-amber-700">
+                      لا يمكن النقل في نفس يوم بدء التسجيل الحالي. يصبح النقل متاحاً في {minimumTransferDate}.
+                    </p>
+                  ) : null}
+                </div>
+                <div>
+                  <label className="form-label" htmlFor="profile-transfer-note">ملاحظة النقل</label>
+                  <textarea
+                    className="form-control min-h-24 resize-y"
+                    id="profile-transfer-note"
+                    name="note"
+                    placeholder="مثلاً: انتقال إلى المرحلة الأعلى أو تغيير المحفّظ"
+                  />
+                </div>
+                <button
+                  className="min-h-11 w-full rounded-xl bg-amber-600 px-4 text-sm font-black text-white transition hover:bg-amber-700 disabled:opacity-60"
+                  disabled={
+                    busyKey !== null ||
+                    !transferTargets.length ||
+                    minimumTransferDate > todayInputValue()
+                  }
+                >
+                  {busyKey === "transfer" ? "جاري تنفيذ النقل..." : "نقل الطالب مع حفظ السجل"}
+                </button>
+              </form>
+            </section>
+          ) : null}
+
           {!data.activeEnrollment && data.student.isActive ? (
             <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
               <p className="text-xs font-bold text-emerald-700">تسجيل جديد</p>
@@ -364,6 +537,80 @@ export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
           )}
         </div>
       </section>
+
+      <section className="rounded-3xl border border-amber-100 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold text-amber-700">سجل الحركة</p>
+            <h2 className="mt-1 text-xl font-black text-slate-950">عمليات نقل الطالب</h2>
+          </div>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">
+            {data.transferHistory.length}
+          </span>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {data.transferHistory.length ? (
+            data.transferHistory.map((transfer) => (
+              <article key={transfer.id} className="rounded-2xl border border-amber-200 p-4">
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs font-bold text-slate-500">من</p>
+                    <h3 className="mt-1 font-black text-slate-950">
+                      {transfer.fromEnrollment.halaqa.nameAr}
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-600">
+                      {transfer.fromEnrollment.halaqa.stageName}
+                    </p>
+                  </div>
+                  <div className="text-center text-xl font-black text-amber-600">←</div>
+                  <div className="rounded-xl bg-amber-50 p-3">
+                    <p className="text-xs font-bold text-amber-700">إلى</p>
+                    <h3 className="mt-1 font-black text-amber-950">
+                      {transfer.toEnrollment.halaqa.nameAr}
+                    </h3>
+                    <p className="mt-1 text-xs text-amber-800">
+                      {transfer.toEnrollment.halaqa.stageName}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-600">
+                  <span className="rounded-full bg-slate-100 px-3 py-1">
+                    تاريخ النقل: {transfer.transferDate}
+                  </span>
+                  {transfer.transferredByName ? (
+                    <span className="rounded-full bg-slate-100 px-3 py-1">
+                      بواسطة: {transfer.transferredByName}
+                    </span>
+                  ) : null}
+                </div>
+                {transfer.note ? (
+                  <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900">
+                    {transfer.note}
+                  </p>
+                ) : null}
+              </article>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-500">
+              لا توجد عمليات نقل مسجلة لهذا الطالب.
+            </div>
+          )}
+        </div>
+      </section>
+
+      {confirmState ? (
+        <ConfirmDialog
+          isOpen={confirmState.isOpen}
+          title={confirmState.title}
+          description={confirmState.description}
+          confirmText={confirmState.confirmText}
+          variant={confirmState.variant}
+          loading={confirmLoading}
+          onConfirm={confirmState.onConfirm}
+          onClose={() => setConfirmState(null)}
+        />
+      ) : null}
     </div>
   );
 }

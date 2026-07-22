@@ -122,3 +122,13 @@ export type OfficialExamScope = Prisma.OfficialExamScopeModel
  * 
  */
 export type AuditLog = Prisma.AuditLogModel
+/**
+ * Model LegacyMigrationRun
+ * 
+ */
+export type LegacyMigrationRun = Prisma.LegacyMigrationRunModel
+/**
+ * Model LegacyIdMap
+ * 
+ */
+export type LegacyIdMap = Prisma.LegacyIdMapModel

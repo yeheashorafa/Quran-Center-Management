@@ -8,6 +8,7 @@ export type LoginStageOption = {
 
 export type LoginUserOption = {
   id: string;
+  username?: string;
   displayName: string;
   roles: AppRoleCode[];
   stageIds: string[];

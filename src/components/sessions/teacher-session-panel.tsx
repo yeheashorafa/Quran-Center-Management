@@ -1,85 +1,86 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { WEEKDAY_LABELS } from "@/lib/halaqat/weekdays";
+import { ParentReportSelector } from "@/components/reports/parent-report-selector";
+import { MonthlyReportsPanel } from "@/components/reports/monthly-reports-panel";
+import { SessionDetailModal, type SessionDetailData } from "@/components/sessions/session-detail-modal";
+import { TeacherStudentsPanel } from "@/components/teacher/teacher-students-panel";
+import { QURAN_SURAHS, calculateAyahPageCount } from "@/lib/quran/metadata";
 import type {
   SessionActivityCode,
   SessionAttendanceCode,
-  SessionStatusCode,
   SessionStudentValue,
   TeacherSessionDashboardData,
   TeacherSessionEditorData,
 } from "@/lib/memorization-sessions/types";
 
-const ATTENDANCE_OPTIONS: Array<{
-  code: SessionAttendanceCode;
-  label: string;
-  activeClass: string;
-}> = [
-  { code: "PRESENT", label: "حاضر", activeClass: "border-emerald-600 bg-emerald-50 text-emerald-900" },
-  { code: "ABSENT", label: "غائب", activeClass: "border-red-500 bg-red-50 text-red-800" },
-  { code: "EXCUSED", label: "عذر", activeClass: "border-blue-500 bg-blue-50 text-blue-800" },
-  { code: "NOT_HEARD", label: "لم يسمع", activeClass: "border-amber-500 bg-amber-50 text-amber-900" },
-];
-
-const ACTIVITY_LABELS: Record<SessionActivityCode, string> = {
-  MEMORIZATION: "حفظ جديد",
-  REVIEW: "مراجعة",
-  RECITATION: "سرد",
+const ACTIVITY_LABELS: Record<
+  SessionActivityCode,
+  { label: string; icon: string; colorClass: string; bgClass: string; borderClass: string }
+> = {
+  MEMORIZATION: {
+    label: "حفظ جديد",
+    icon: "📖",
+    colorClass: "text-emerald-900",
+    bgClass: "bg-emerald-50",
+    borderClass: "border-emerald-300",
+  },
+  REVIEW: {
+    label: "مراجعة",
+    icon: "🔄",
+    colorClass: "text-blue-900",
+    bgClass: "bg-blue-50",
+    borderClass: "border-blue-300",
+  },
+  RECITATION: {
+    label: "سرد",
+    icon: "🎙️",
+    colorClass: "text-purple-900",
+    bgClass: "bg-purple-50",
+    borderClass: "border-purple-300",
+  },
 };
 
-type ApiPayload = {
-  message?: string;
-  data?: TeacherSessionEditorData | null;
-};
-
-function formatArabicDate(value: string): string {
+async function readApiPayload(response: Response): Promise<{ message?: string; data?: TeacherSessionEditorData }> {
   try {
-    return new Intl.DateTimeFormat("ar-PS", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }).format(new Date(`${value}T12:00:00Z`));
+    return (await response.json()) as { message?: string; data?: TeacherSessionEditorData };
   } catch {
-    return value;
+    return {};
   }
-}
-
-function sessionStatusLabel(status: SessionStatusCode): string {
-  if (status === "COMPLETED") return "مكتملة";
-  if (status === "LOCKED") return "مقفلة";
-  return "مسودة";
-}
-
-async function readApiPayload(response: Response): Promise<ApiPayload> {
-  return (await response.json().catch(() => ({}))) as ApiPayload;
 }
 
 export function TeacherSessionPanel({
   dashboard,
+  initialHalaqaId,
   initialDate,
 }: {
   dashboard: TeacherSessionDashboardData;
+  initialHalaqaId: string;
   initialDate: string;
 }) {
-  const [halaqaId, setHalaqaId] = useState(dashboard.halaqat[0]?.id ?? "");
+  const [activeTab, setActiveTab] = useState<"recitation" | "students" | "history" | "parent_report" | "monthly_report">("recitation");
+  const [halaqaId, setHalaqaId] = useState(initialHalaqaId);
   const [sessionDate, setSessionDate] = useState(initialDate);
   const [editor, setEditor] = useState<TeacherSessionEditorData | null>(null);
   const [students, setStudents] = useState<SessionStudentValue[]>([]);
-  const [dirtyStudentIds, setDirtyStudentIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
 
-  const selectedHalaqa = dashboard.halaqat.find((halaqa) => halaqa.id === halaqaId) ?? null;
+  // History inspection Modal state
+  const [selectedHistorySession, setSelectedHistorySession] = useState<SessionDetailData | null>(null);
+
+  const selectedHalaqa = useMemo(
+    () => dashboard.halaqat.find((item) => item.id === halaqaId) ?? dashboard.halaqat[0],
+    [dashboard.halaqat, halaqaId],
+  );
 
   useEffect(() => {
     if (!halaqaId || !sessionDate) return;
 
     const controller = new AbortController();
-
     queueMicrotask(() => {
-      if (controller.signal.aborted) return;
       setLoading(true);
       setNotice(null);
     });
@@ -89,22 +90,27 @@ export function TeacherSessionPanel({
       cache: "no-store",
     })
       .then(async (response) => {
-        const payload = (await response.json().catch(() => ({}))) as
-          | TeacherSessionEditorData
-          | { message?: string };
+        const payload = (await response.json().catch(() => ({}))) as TeacherSessionEditorData | { message?: string };
         if (!response.ok) {
           throw new Error("message" in payload ? payload.message || "تعذر تحميل الجلسة." : "تعذر تحميل الجلسة.");
         }
         const data = payload as TeacherSessionEditorData;
         setEditor(data);
         setStudents(data.students);
-        setDirtyStudentIds(new Set());
+
+        // Default first student expanded for mobile
+        if (data.students.length > 0) {
+          setExpandedStudentId(data.students[0]!.studentId);
+        }
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
         setEditor(null);
         setStudents([]);
-        setNotice({ type: "error", text: error instanceof Error ? error.message : "تعذر تحميل الجلسة." });
+        setNotice({
+          type: "error",
+          text: error instanceof Error ? error.message : "تعذر تحميل الجلسة.",
+        });
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -134,15 +140,8 @@ export function TeacherSessionPanel({
     return { present, absent, excused, notHeard, pending, pages };
   }, [students]);
 
-  function markDirty(studentId: string) {
-    setDirtyStudentIds((current) => new Set(current).add(studentId));
-  }
-
   function updateStudent(studentId: string, update: (student: SessionStudentValue) => SessionStudentValue) {
-    setStudents((current) =>
-      current.map((student) => (student.studentId === studentId ? update(student) : student)),
-    );
-    markDirty(studentId);
+    setStudents((current) => current.map((student) => (student.studentId === studentId ? update(student) : student)));
   }
 
   function setAttendance(studentId: string, attendance: SessionAttendanceCode) {
@@ -156,21 +155,11 @@ export function TeacherSessionPanel({
     }));
   }
 
-  function updateActivity(
-    studentId: string,
-    type: SessionActivityCode,
-    field: "text" | "pageCount",
-    value: string,
-  ) {
+  function updateActivityText(studentId: string, type: SessionActivityCode, text: string, pageCount: number) {
     updateStudent(studentId, (student) => ({
       ...student,
       activities: student.activities.map((activity) =>
-        activity.type === type
-          ? {
-              ...activity,
-              [field]: field === "pageCount" ? Math.max(0, Number(value || 0)) : value,
-            }
-          : activity,
+        activity.type === type ? { ...activity, text, pageCount } : activity,
       ),
     }));
   }
@@ -212,25 +201,10 @@ export function TeacherSessionPanel({
       const payload = await readApiPayload(response);
       if (!response.ok) throw new Error(payload.message || "تعذر حفظ الجلسة.");
       if (payload.data) {
-        const savedStudentIds = new Set(studentIds);
-        const unsavedStudentIds = new Set(
-          [...dirtyStudentIds].filter((studentId) => !savedStudentIds.has(studentId)),
-        );
-        const localByStudentId = new Map(
-          students
-            .filter((student) => unsavedStudentIds.has(student.studentId))
-            .map((student) => [student.studentId, student]),
-        );
-
         setEditor(payload.data);
-        setStudents(
-          payload.data.students.map(
-            (student) => localByStudentId.get(student.studentId) ?? student,
-          ),
-        );
-        setDirtyStudentIds(unsavedStudentIds);
+        setStudents(payload.data.students);
       }
-      setNotice({ type: "success", text: payload.message || "تم الحفظ بنجاح." });
+      setNotice({ type: "success", text: payload.message || "تم حفظ البيانات بنجاح." });
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "تعذر حفظ الجلسة." });
     } finally {
@@ -238,35 +212,74 @@ export function TeacherSessionPanel({
     }
   }
 
-  function openRecentSession(halaqa: string, date: string) {
-    setHalaqaId(halaqa);
-    setSessionDate(date);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  if (!dashboard.halaqat.length) {
-    return (
-      <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
-        <h1 className="text-lg font-black">لا توجد حلقة معيّنة على حسابك</h1>
-        <p className="mt-2 text-sm leading-7">اطلب من مدير المركز ربط حسابك بحلقة نشطة قبل تسجيل التسميع.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-5">
-      <section className="rounded-3xl bg-gradient-to-l from-emerald-950 via-emerald-800 to-emerald-700 p-5 text-white shadow-lg shadow-emerald-950/10 sm:p-6">
-        <p className="text-sm font-bold text-emerald-100">تسجيل التسميع اليومي</p>
-        <h1 className="mt-1 text-2xl font-black">جلسة الحلقة</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-7 text-emerald-50">
-          اختر التاريخ فقط؛ اليوم يُستخرج تلقائياً، ويمنع الخادم الحفظ إذا لم يوافق جدول الحلقة.
-        </p>
-      </section>
+    <div className="space-y-6" dir="rtl">
+      {/* 6 Organized Dashboard Tabs Navigation Bar */}
+      <nav className="flex overflow-x-auto rounded-3xl border border-emerald-100 bg-white p-1.5 shadow-sm scrollbar-none">
+        <button
+          type="button"
+          onClick={() => setActiveTab("recitation")}
+          className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-5 text-xs font-black transition ${
+            activeTab === "recitation"
+              ? "bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
+              : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-900"
+          }`}
+        >
+          <span>📖 التسميع اليومي</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("students")}
+          className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-5 text-xs font-black transition ${
+            activeTab === "students"
+              ? "bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
+              : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-900"
+          }`}
+        >
+          <span>👥 طلاب الحلقة</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("history")}
+          className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-5 text-xs font-black transition ${
+            activeTab === "history"
+              ? "bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
+              : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-900"
+          }`}
+        >
+          <span>📜 الجلسات المسجلة ({dashboard.recentSessions.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("parent_report")}
+          className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-5 text-xs font-black transition ${
+            activeTab === "parent_report"
+              ? "bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
+              : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-900"
+          }`}
+        >
+          <span>📄 تقرير ولي الأمر</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("monthly_report")}
+          className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-5 text-xs font-black transition ${
+            activeTab === "monthly_report"
+              ? "bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
+              : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-900"
+          }`}
+        >
+          <span>📊 التقرير الشهري</span>
+        </button>
+      </nav>
 
       {notice ? (
         <div
-          role="status"
-          className={`rounded-2xl border px-4 py-3 text-sm font-bold ${
+          className={`rounded-2xl border p-4 text-xs font-black ${
             notice.type === "success"
               ? "border-emerald-200 bg-emerald-50 text-emerald-900"
               : "border-red-200 bg-red-50 text-red-800"
@@ -276,316 +289,454 @@ export function TeacherSessionPanel({
         </div>
       ) : null}
 
-      <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="form-label" htmlFor="session-halaqa">الحلقة</label>
-            <select
-              id="session-halaqa"
-              className="form-control"
-              value={halaqaId}
-              onChange={(event) => setHalaqaId(event.target.value)}
-            >
-              {dashboard.halaqat.map((halaqa) => (
-                <option key={halaqa.id} value={halaqa.id}>
-                  {halaqa.nameAr} — {halaqa.stageName}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="form-label" htmlFor="session-date">التاريخ</label>
-            <input
-              id="session-date"
-              className="form-control"
-              type="date"
-              max={initialDate}
-              value={sessionDate}
-              onChange={(event) => setSessionDate(event.target.value)}
-            />
-          </div>
-        </div>
+      {/* Tab 1: Daily Recitation Tab */}
+      {activeTab === "recitation" ? (
+        <div className="space-y-6">
+          {/* Controls Bar: Single Halaqa Display or Dropdown */}
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="form-label" htmlFor="session-halaqa">الحلقة الدراسية</label>
+                {dashboard.halaqat.length > 1 ? (
+                  <select
+                    id="session-halaqa"
+                    className="form-control font-black"
+                    value={halaqaId}
+                    onChange={(event) => setHalaqaId(event.target.value)}
+                  >
+                    {dashboard.halaqat.map((halaqa) => (
+                      <option key={halaqa.id} value={halaqa.id}>
+                        {halaqa.nameAr} ({halaqa.stageName})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="form-control flex items-center bg-emerald-50/60 font-black text-emerald-950 border-emerald-200">
+                    🕌 {selectedHalaqa?.nameAr} ({selectedHalaqa?.stageName})
+                  </div>
+                )}
+              </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
-          <span className="rounded-full bg-slate-100 px-3 py-1.5 font-bold text-slate-700">
-            {formatArabicDate(sessionDate)}
-          </span>
-          {editor ? (
-            <span className="rounded-full bg-emerald-50 px-3 py-1.5 font-black text-emerald-800">
-              {editor.weekdayLabel}
-            </span>
-          ) : null}
-          {selectedHalaqa?.weekdays.map((weekday) => (
-            <span key={weekday} className="rounded-full border border-emerald-100 px-3 py-1 text-xs font-bold text-slate-600">
-              {WEEKDAY_LABELS[weekday]}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      {loading ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-500 shadow-sm">
-          جاري تحميل الطلاب والجلسة...
-        </div>
-      ) : null}
-
-      {!loading && editor && !editor.allowed ? (
-        <div className="rounded-3xl border border-red-200 bg-red-50 p-5 text-red-900 shadow-sm">
-          <h2 className="font-black">لا يمكن التسجيل في هذا التاريخ</h2>
-          <p className="mt-2 text-sm leading-7">{editor.reason}</p>
-          <p className="mt-2 text-xs font-bold text-red-700">لن يقبل الخادم أي محاولة حفظ لهذا اليوم.</p>
-        </div>
-      ) : null}
-
-      {!loading && editor?.allowed ? (
-        <>
-          <section className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-            <StatCard label="الطلاب" value={students.length} />
-            <StatCard label="حاضر" value={totals.present} />
-            <StatCard label="غائب" value={totals.absent} />
-            <StatCard label="عذر" value={totals.excused} />
-            <StatCard label="لم يسمع" value={totals.notHeard} />
-            <StatCard label="الصفحات" value={Number(totals.pages.toFixed(2))} />
-          </section>
-
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm">
-            <div>
-              <p className="text-sm font-black text-slate-900">
-                {editor.halaqa.nameAr} — {editor.weekdayLabel}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {editor.session
-                  ? `حالة الجلسة: ${sessionStatusLabel(editor.session.status)} · إصدار ${editor.session.version}`
-                  : "جلسة جديدة لم تُحفظ بعد"}
-              </p>
-            </div>
-            {editor.session?.status === "COMPLETED" ? (
-              <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-900">
-                جلسة معتمدة — التعديل مسموح ومسجل
-              </span>
-            ) : (
-              <span className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-black text-amber-900">
-                {totals.pending} طالب غير مسجل
-              </span>
-            )}
-          </section>
-
-          {students.length ? (
-            <div className="space-y-3">
-              {students.map((student, index) => (
-                <StudentSessionCard
-                  key={student.studentId}
-                  index={index}
-                  student={student}
-                  dirty={dirtyStudentIds.has(student.studentId)}
-                  busy={busyKey === `student-${student.studentId}`}
-                  disabled={Boolean(busyKey) || editor.session?.status === "LOCKED"}
-                  onAttendance={(attendance) => setAttendance(student.studentId, attendance)}
-                  onNotes={(notes) =>
-                    updateStudent(student.studentId, (current) => ({ ...current, notes }))
-                  }
-                  onActivity={(type, field, value) =>
-                    updateActivity(student.studentId, type, field, value)
-                  }
-                  onSave={() => saveStudents([student.studentId], false)}
+              <div>
+                <label className="form-label" htmlFor="session-date">تاريخ التسميع</label>
+                <input
+                  id="session-date"
+                  className="form-control font-black"
+                  type="date"
+                  max={initialDate}
+                  value={sessionDate}
+                  onChange={(event) => setSessionDate(event.target.value)}
                 />
-              ))}
+              </div>
             </div>
-          ) : (
-            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center text-sm font-bold text-amber-900">
-              لا يوجد طلاب مسجلون في الحلقة في هذا التاريخ.
-            </div>
-          )}
+          </section>
 
-          {students.length ? (
-            <div className="sticky bottom-3 z-10 grid gap-2 rounded-3xl border border-emerald-200 bg-white/95 p-3 shadow-xl backdrop-blur sm:grid-cols-2">
-              <button
-                type="button"
-                disabled={Boolean(busyKey) || dirtyStudentIds.size === 0}
-                onClick={() => saveStudents([...dirtyStudentIds], false)}
-                className="min-h-12 rounded-2xl border border-emerald-700 px-4 font-black text-emerald-800 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                {busyKey === "save-all" ? "جاري الحفظ..." : `حفظ التعديلات (${dirtyStudentIds.size})`}
-              </button>
-              <button
-                type="button"
-                disabled={Boolean(busyKey) || editor.session?.status === "LOCKED"}
-                onClick={() => saveStudents(students.map((student) => student.studentId), true)}
-                className="min-h-12 rounded-2xl bg-emerald-800 px-4 font-black text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                {busyKey === "complete-session" ? "جاري الاعتماد..." : "حفظ الكل واعتماد الجلسة"}
-              </button>
+          {/* Recitation Main Content */}
+          {loading ? (
+            <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center text-slate-500 shadow-sm">
+              <div className="mx-auto size-8 animate-spin rounded-full border-4 border-emerald-700 border-t-transparent" />
+              <p className="mt-4 text-sm font-bold">جاري تحميل طلاب الحلقة والجلسة...</p>
             </div>
-          ) : null}
-        </>
-      ) : null}
+          ) : editor?.allowed ? (
+            <div className="space-y-4">
+              {/* Quick Stats Bar */}
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                <StatCard label="الطلاب" value={students.length} color="bg-slate-50 text-slate-900" />
+                <StatCard label="حاضر" value={totals.present} color="bg-emerald-50 text-emerald-900" />
+                <StatCard label="غائب" value={totals.absent} color="bg-red-50 text-red-900" />
+                <StatCard label="عذر" value={totals.excused} color="bg-blue-50 text-blue-900" />
+                <StatCard label="لم يسمع" value={totals.notHeard} color="bg-amber-50 text-amber-900" />
+                <StatCard label="صفحات" value={totals.pages} color="bg-purple-50 text-purple-900" />
+              </div>
 
-      <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
-        <h2 className="text-lg font-black text-slate-900">آخر الجلسات</h2>
-        <p className="mt-1 text-sm text-slate-500">افتح أي جلسة سابقة لتعديلها أو استكمالها.</p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {dashboard.recentSessions.length ? (
-            dashboard.recentSessions.map((recent) => (
-              <button
-                key={recent.id}
-                type="button"
-                onClick={() => openRecentSession(recent.halaqaId, recent.sessionDate)}
-                className="rounded-2xl border border-slate-200 p-3 text-right transition hover:border-emerald-300 hover:bg-emerald-50"
-              >
-                <span className="block font-black text-slate-900">{recent.halaqaName}</span>
-                <span className="mt-1 block text-xs text-slate-500">{formatArabicDate(recent.sessionDate)}</span>
-                <span className="mt-2 flex items-center justify-between gap-2 text-xs font-bold">
-                  <span className={recent.status === "COMPLETED" ? "text-emerald-700" : "text-amber-700"}>
-                    {sessionStatusLabel(recent.status)}
-                  </span>
-                  <span className="text-slate-600">{recent.recordedStudents}/{recent.totalStudents} طالب</span>
+              {/* Collapsible Student Recitation Cards (Mobile First Accordion) */}
+              <div className="space-y-3">
+                {students.map((student) => {
+                  const isExpanded = expandedStudentId === student.studentId;
+                  return (
+                    <article
+                      key={student.studentId}
+                      className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-emerald-200"
+                    >
+                      {/* Card Collapsible Header */}
+                      <div
+                        onClick={() => setExpandedStudentId(isExpanded ? null : student.studentId)}
+                        className="flex cursor-pointer items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="flex size-9 items-center justify-center rounded-2xl bg-emerald-50 text-sm font-black text-emerald-900">
+                            {student.attendance === "PRESENT"
+                              ? "✅"
+                              : student.attendance === "ABSENT"
+                                ? "❌"
+                                : student.attendance === "EXCUSED"
+                                  ? "🔵"
+                                  : student.attendance === "NOT_HEARD"
+                                    ? "⚠️"
+                                    : "⏳"}
+                          </span>
+                          <div>
+                            <h3 className="text-base font-black text-slate-950">{student.displayName}</h3>
+                            <p className="text-xs font-bold text-slate-500">
+                              {student.attendance === "PRESENT"
+                                ? "حاضر (اضغط لإدخال السور)"
+                                : student.attendance === "ABSENT"
+                                  ? "غائب"
+                                  : student.attendance === "EXCUSED"
+                                    ? "عذر"
+                                    : student.attendance === "NOT_HEARD"
+                                      ? "حضر ولم يسمّع"
+                                      : "لم تسجّل حالته بعد"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-slate-400">
+                            {isExpanded ? "▲ إغلاق" : "▼ تسجيل"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Accordion Body */}
+                      {isExpanded ? (
+                        <div className="mt-4 border-t border-slate-100 pt-4 space-y-4">
+                          {/* Attendance Options */}
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <button
+                              type="button"
+                              onClick={() => setAttendance(student.studentId, "PRESENT")}
+                              className={`rounded-2xl p-2.5 text-xs font-black transition ${
+                                student.attendance === "PRESENT"
+                                  ? "bg-emerald-900 text-white shadow-md"
+                                  : "border border-slate-200 bg-white text-slate-700 hover:bg-emerald-50"
+                              }`}
+                            >
+                              حاضر
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAttendance(student.studentId, "NOT_HEARD")}
+                              className={`rounded-2xl p-2.5 text-xs font-black transition ${
+                                student.attendance === "NOT_HEARD"
+                                  ? "bg-amber-700 text-white shadow-md"
+                                  : "border border-slate-200 bg-white text-slate-700 hover:bg-amber-50"
+                              }`}
+                            >
+                              لم يسمّع
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAttendance(student.studentId, "ABSENT")}
+                              className={`rounded-2xl p-2.5 text-xs font-black transition ${
+                                student.attendance === "ABSENT"
+                                  ? "bg-red-700 text-white shadow-md"
+                                  : "border border-slate-200 bg-white text-slate-700 hover:bg-red-50"
+                              }`}
+                            >
+                              غائب
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAttendance(student.studentId, "EXCUSED")}
+                              className={`rounded-2xl p-2.5 text-xs font-black transition ${
+                                student.attendance === "EXCUSED"
+                                  ? "bg-blue-700 text-white shadow-md"
+                                  : "border border-slate-200 bg-white text-slate-700 hover:bg-blue-50"
+                              }`}
+                            >
+                              عذر
+                            </button>
+                          </div>
+
+                          {/* Recitation Quran Surahs Input Area if PRESENT */}
+                          {student.attendance === "PRESENT" ? (
+                            <div className="space-y-4 rounded-2xl bg-slate-50 p-4 border border-slate-200">
+                              {student.activities.map((activity) => (
+                                <ActivityQuranSelector
+                                  key={activity.type}
+                                  activity={activity}
+                                  onChange={(text, pages) =>
+                                    updateActivityText(student.studentId, activity.type, text, pages)
+                                  }
+                                />
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {/* Student Notes */}
+                          <div>
+                            <label className="form-label text-xs">ملاحظات المحفظ للطالب</label>
+                            <input
+                              type="text"
+                              placeholder="أدخل ملاحظات خاصة إن وجدت..."
+                              className="form-control text-xs font-bold"
+                              value={student.notes || ""}
+                              onChange={(e) =>
+                                updateStudent(student.studentId, (s) => ({ ...s, notes: e.target.value }))
+                              }
+                            />
+                          </div>
+
+                          {/* Individual Save Button */}
+                          <div className="flex justify-end pt-2">
+                            <button
+                              type="button"
+                              disabled={busyKey === `student-${student.studentId}`}
+                              onClick={() => saveStudents([student.studentId], false)}
+                              className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white hover:bg-black disabled:opacity-50"
+                            >
+                              {busyKey === `student-${student.studentId}` ? "جاري الحفظ..." : "حفظ بيانات هذا الطالب فقط"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+
+              {/* Complete Session Action Footer */}
+              <div className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-emerald-200 bg-white/95 p-4 shadow-xl backdrop-blur-md">
+                <span className="text-xs font-black text-slate-800">
+                  تم تسجيل: {totals.present + totals.absent + totals.excused + totals.notHeard} من {students.length} طالب
                 </span>
-              </button>
-            ))
+                <button
+                  type="button"
+                  disabled={busyKey === "complete-session"}
+                  onClick={() => saveStudents(students.map((s) => s.studentId), true)}
+                  className="min-h-12 rounded-2xl bg-emerald-900 px-6 text-sm font-black text-white shadow-lg transition hover:bg-emerald-950 disabled:opacity-50"
+                >
+                  {busyKey === "complete-session" ? "جاري اعتماد الجلسة..." : "✅ اعتماد الجلسة بالكامل"}
+                </button>
+              </div>
+            </div>
           ) : (
-            <p className="text-sm text-slate-500">لا توجد جلسات محفوظة بعد.</p>
+            <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-center text-sm font-bold text-red-900">
+              لا يمكن التسميع في هذا التاريخ لعدم مواءمته لجدول الحلقة.
+            </div>
           )}
         </div>
-      </section>
+      ) : null}
+
+      {/* Tab 2: Teacher Students Tab */}
+      {activeTab === "students" ? (
+        <TeacherStudentsPanel
+          halaqaId={halaqaId}
+          students={students.map((s) => ({
+            studentId: s.studentId,
+            fullName: s.fullName,
+            displayName: s.displayName,
+            parentPhone: null,
+            gradeLevel: null,
+            halaqaName: selectedHalaqa.nameAr,
+            stageName: selectedHalaqa.stageName,
+            memorizationStartedOn: null,
+          }))}
+          onRefresh={() => window.location.reload()}
+        />
+      ) : null}
+
+      {/* Tab 3: Saved History Sessions Tab */}
+      {activeTab === "history" ? (
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+          <h2 className="text-lg font-black text-slate-950">سجل الجلسات التسميعية الأخيرة</h2>
+          <div className="divide-y divide-slate-100">
+            {dashboard.recentSessions.map((session) => (
+              <div
+                key={session.id}
+                onClick={() =>
+                  setSelectedHistorySession({
+                    sessionId: session.id,
+                    halaqaId: session.halaqaId,
+                    halaqaName: session.halaqaName,
+                    stageName: selectedHalaqa.stageName,
+                    teacherName: "",
+                    sessionDate: session.sessionDate,
+                    weekdayLabel: session.sessionDate,
+                    status: session.status,
+                    version: 1,
+                    items: students.map((item) => ({
+                      studentId: item.studentId,
+                      displayName: item.displayName,
+                      attendance: item.attendance,
+                      notes: item.notes,
+                      activities: item.activities.map((act) => ({
+                        type: act.type,
+                        pageCount: act.pageCount,
+                        notes: act.text,
+                      })),
+                    })),
+                  })
+                }
+                className="flex cursor-pointer items-center justify-between py-3 hover:bg-slate-50 rounded-xl px-3 transition"
+              >
+                <div>
+                  <span className="text-xs font-black text-emerald-900">جلسة تاريخ: {session.sessionDate}</span>
+                  <p className="text-sm font-bold text-slate-800">{session.halaqaName} ({session.recordedStudents}/{session.totalStudents} طالب)</p>
+                </div>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-900">
+                  استعراض وتعديل الجلسة 🔍
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Tab 4: Parent Report Selector Tab */}
+      {activeTab === "parent_report" ? (
+        <ParentReportSelector students={students.map((s) => ({ id: s.studentId, displayName: s.displayName }))} />
+      ) : null}
+
+      {/* Tab 5: Monthly Reports Tab */}
+      {activeTab === "monthly_report" ? (
+        <MonthlyReportsPanel
+          options={{
+            roleCode: "TEACHER",
+            defaultKind: "COMPREHENSIVE",
+            allowedKinds: ["COMPREHENSIVE"],
+            stages: [],
+          }}
+          initialMonth={initialDate.slice(0, 7)}
+        />
+      ) : null}
+
+      {/* Modal for History Detail Inspection & Editing */}
+      {selectedHistorySession ? (
+        <SessionDetailModal
+          data={selectedHistorySession}
+          onClose={() => setSelectedHistorySession(null)}
+          onUpdateSuccess={() => {
+            setSelectedHistorySession(null);
+            window.location.reload();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
-function StudentSessionCard({
-  index,
-  student,
-  dirty,
-  busy,
-  disabled,
-  onAttendance,
-  onNotes,
-  onActivity,
-  onSave,
-}: {
-  index: number;
-  student: SessionStudentValue;
-  dirty: boolean;
-  busy: boolean;
-  disabled: boolean;
-  onAttendance: (attendance: SessionAttendanceCode) => void;
-  onNotes: (notes: string) => void;
-  onActivity: (
-    type: SessionActivityCode,
-    field: "text" | "pageCount",
-    value: string,
-  ) => void;
-  onSave: () => void;
-}) {
-  const studentPages = student.activities.reduce(
-    (sum, activity) => sum + Number(activity.pageCount || 0),
-    0,
-  );
-
+function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <article className={`rounded-3xl border bg-white p-4 shadow-sm ${dirty ? "border-amber-300" : "border-emerald-100"}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-800 text-sm font-black text-white">
-            {index + 1}
-          </span>
-          <div className="min-w-0">
-            <h3 className="truncate font-black text-slate-900">{student.displayName}</h3>
-            {student.fullName !== student.displayName ? (
-              <p className="truncate text-xs text-slate-500">{student.fullName}</p>
-            ) : null}
-          </div>
-        </div>
-        <div className="text-left">
-          <span className="block text-sm font-black text-emerald-800">{Number(studentPages.toFixed(2))}</span>
-          <span className="text-[11px] text-slate-500">صفحة</span>
-        </div>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {ATTENDANCE_OPTIONS.map((option) => {
-          const selected = student.attendance === option.code;
-          return (
-            <button
-              key={option.code}
-              type="button"
-              disabled={disabled}
-              onClick={() => onAttendance(option.code)}
-              className={`min-h-11 rounded-2xl border-2 px-3 text-sm font-black transition disabled:opacity-50 ${
-                selected ? option.activeClass : "border-slate-200 bg-white text-slate-600"
-              }`}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {student.attendance === "PRESENT" ? (
-        <div className="mt-4 space-y-3">
-          {student.activities.map((activity) => (
-            <div key={activity.type} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-              <p className="mb-2 text-sm font-black text-slate-800">{ACTIVITY_LABELS[activity.type]}</p>
-              <div className="grid gap-2 sm:grid-cols-[1fr_120px]">
-                <input
-                  className="form-control min-h-11 bg-white"
-                  value={activity.text}
-                  disabled={disabled}
-                  onChange={(event) => onActivity(activity.type, "text", event.target.value)}
-                  placeholder="السورة أو الصفحات أو وصف الإنجاز"
-                />
-                <div>
-                  <label className="sr-only" htmlFor={`${student.studentId}-${activity.type}-pages`}>
-                    عدد الصفحات
-                  </label>
-                  <input
-                    id={`${student.studentId}-${activity.type}-pages`}
-                    className="form-control min-h-11 bg-white text-center"
-                    type="number"
-                    min="0"
-                    max="604"
-                    step="0.25"
-                    inputMode="decimal"
-                    value={activity.pageCount || ""}
-                    disabled={disabled}
-                    onChange={(event) => onActivity(activity.type, "pageCount", event.target.value)}
-                    placeholder="صفحات"
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="mt-4">
-        <label className="form-label" htmlFor={`${student.studentId}-notes`}>ملاحظة</label>
-        <input
-          id={`${student.studentId}-notes`}
-          className="form-control"
-          value={student.notes}
-          disabled={disabled}
-          onChange={(event) => onNotes(event.target.value)}
-          placeholder="ملاحظة اختيارية عن الطالب"
-        />
-      </div>
-
-      <button
-        type="button"
-        disabled={disabled || !dirty}
-        onClick={onSave}
-        className="mt-3 min-h-11 w-full rounded-2xl bg-slate-900 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {busy ? "جاري حفظ الطالب..." : dirty ? "حفظ هذا الطالب" : "تم حفظ بيانات الطالب"}
-      </button>
-    </article>
+    <div className={`rounded-2xl p-3 text-center ${color}`}>
+      <span className="block text-[11px] font-bold opacity-80">{label}</span>
+      <span className="text-lg font-black">{value}</span>
+    </div>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+/**
+ * Component for selecting Quran Surah, fromAyah, toAyah with Full Surah button & auto page count
+ */
+function ActivityQuranSelector({
+  activity,
+  onChange,
+}: {
+  activity: { type: SessionActivityCode; text: string; pageCount: number };
+  onChange: (text: string, pageCount: number) => void;
+}) {
+  const meta = ACTIVITY_LABELS[activity.type];
+  const [selectedSurahNumber, setSelectedSurahNumber] = useState<number>(1);
+  const [fromAyah, setFromAyah] = useState<number>(1);
+  const [toAyah, setToAyah] = useState<number>(7);
+
+  const selectedSurah = useMemo(
+    () => QURAN_SURAHS.find((s) => s.number === selectedSurahNumber) ?? QURAN_SURAHS[0]!,
+    [selectedSurahNumber],
+  );
+
+  function handleSurahChange(num: number) {
+    setSelectedSurahNumber(num);
+    const surah = QURAN_SURAHS.find((s) => s.number === num) ?? QURAN_SURAHS[0]!;
+    setFromAyah(1);
+    setToAyah(surah.totalAyahs);
+    const pages = calculateAyahPageCount(num, 1, surah.totalAyahs);
+    onChange(`سورة ${surah.nameAr} (من 1 إلى ${surah.totalAyahs})`, pages);
+  }
+
+  function handleFullSurah() {
+    setFromAyah(1);
+    setToAyah(selectedSurah.totalAyahs);
+    const pages = calculateAyahPageCount(selectedSurah.number, 1, selectedSurah.totalAyahs);
+    onChange(`سورة ${selectedSurah.nameAr} كاملة`, pages);
+  }
+
+  function handleAyahChange(from: number, to: number) {
+    const validFrom = Math.max(1, Math.min(from, selectedSurah.totalAyahs));
+    const validTo = Math.max(validFrom, Math.min(to, selectedSurah.totalAyahs));
+    setFromAyah(validFrom);
+    setToAyah(validTo);
+    const pages = calculateAyahPageCount(selectedSurah.number, validFrom, validTo);
+    onChange(`سورة ${selectedSurah.nameAr} (${validFrom} - ${validTo})`, pages);
+  }
+
   return (
-    <article className="rounded-2xl border border-emerald-100 bg-white p-3 text-center shadow-sm">
-      <p className="text-xl font-black text-emerald-800">{value}</p>
-      <p className="mt-1 text-[11px] font-bold text-slate-500">{label}</p>
-    </article>
+    <div className={`rounded-2xl border p-3.5 space-y-3 ${meta.bgClass} ${meta.borderClass}`}>
+      <div className="flex items-center justify-between">
+        <span className={`text-xs font-black flex items-center gap-1.5 ${meta.colorClass}`}>
+          <span>{meta.icon}</span>
+          <span>{meta.label}</span>
+        </span>
+        <button
+          type="button"
+          onClick={handleFullSurah}
+          className="rounded-xl bg-white px-2.5 py-1 text-[11px] font-black text-slate-800 border border-slate-200 hover:bg-slate-50"
+        >
+          🎯 السورة كاملة
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {/* Surah Dropdown */}
+        <div>
+          <label className="text-[11px] font-bold text-slate-600 block mb-1">اختر السورة:</label>
+          <select
+            value={selectedSurahNumber}
+            onChange={(e) => handleSurahChange(Number(e.target.value))}
+            className="form-control text-xs font-black"
+          >
+            {QURAN_SURAHS.map((s) => (
+              <option key={s.number} value={s.number}>
+                {s.number}. {s.nameAr} ({s.totalAyahs} آية)
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* From Ayah */}
+        <div>
+          <label className="text-[11px] font-bold text-slate-600 block mb-1">من آية:</label>
+          <input
+            type="number"
+            min={1}
+            max={selectedSurah.totalAyahs}
+            value={fromAyah}
+            onChange={(e) => handleAyahChange(Number(e.target.value), toAyah)}
+            className="form-control text-xs font-black"
+          />
+        </div>
+
+        {/* To Ayah */}
+        <div>
+          <label className="text-[11px] font-bold text-slate-600 block mb-1">إلى آية:</label>
+          <input
+            type="number"
+            min={1}
+            max={selectedSurah.totalAyahs}
+            value={toAyah}
+            onChange={(e) => handleAyahChange(fromAyah, Number(e.target.value))}
+            className="form-control text-xs font-black"
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between text-xs font-bold pt-1 text-slate-700">
+        <span>النص المحسوب: {activity.text || `سورة ${selectedSurah.nameAr}`}</span>
+        <span className="rounded-md bg-white px-2 py-0.5 font-black border text-slate-900">
+          الصفحات: {activity.pageCount} ص
+        </span>
+      </div>
+    </div>
   );
 }

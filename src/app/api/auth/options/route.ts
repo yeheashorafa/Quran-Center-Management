@@ -31,6 +31,7 @@ export async function GET() {
       orderBy: { displayName: "asc" },
       select: {
         id: true,
+        username: true,
         displayName: true,
         roles: {
           select: { role: { select: { code: true } } },
@@ -62,6 +63,7 @@ export async function GET() {
     })),
     users: users.map((user) => ({
       id: user.id,
+      username: user.username,
       displayName: user.displayName,
       roles: user.roles
         .map((item) => item.role.code)

@@ -565,3 +565,42 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+model LegacyMigrationRun {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceSystem      String    @map("source_system") @db.VarChar(100)
+  sourceFingerprint String    @map("source_fingerprint") @db.VarChar(64)
+  status            String    @db.VarChar(40)
+  dryRun            Boolean   @default(false) @map("dry_run")
+  inputManifest     Json?     @map("input_manifest")
+  summary           Json?
+  errorMessage      String?   @map("error_message") @db.Text
+  startedAt         DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt       DateTime? @map("completed_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  idMaps LegacyIdMap[]
+
+  @@index([sourceSystem, sourceFingerprint, status])
+  @@index([startedAt])
+  @@map("legacy_migration_runs")
+}
+
+model LegacyIdMap {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId        String?  @map("run_id") @db.Uuid
+  sourceSystem String   @map("source_system") @db.VarChar(100)
+  entityType   String   @map("entity_type") @db.VarChar(80)
+  legacyId     String   @map("legacy_id") @db.VarChar(300)
+  newId        String   @map("new_id") @db.Uuid
+  canonicalKey String?  @map("canonical_key") @db.Text
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  run LegacyMigrationRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceSystem, entityType, legacyId])
+  @@index([entityType, newId])
+  @@index([runId])
+  @@map("legacy_id_maps")
+}

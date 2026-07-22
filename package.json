@@ -18,7 +18,11 @@
     "db:check": "tsx src/scripts/check-database.ts",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
-    "auth:create-admin": "tsx src/scripts/create-initial-admin.ts"
+    "auth:create-admin": "tsx src/scripts/create-initial-admin.ts",
+    "legacy:analyze": "tsx src/scripts/legacy-migration-analyze.ts",
+    "legacy:import": "tsx src/scripts/legacy-migration-import.ts",
+    "legacy:verify": "tsx src/scripts/legacy-migration-verify.ts",
+    "auth:activate-migrated-user": "tsx src/scripts/activate-migrated-user.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -26,6 +30,7 @@
     "@prisma/client": "^7.9.0",
     "argon2": "^0.45.0",
     "dotenv": "^17.4.2",
+    "lucide-react": "^1.25.0",
     "next": "16.2.10",
     "pg": "^8.22.0",
     "react": "19.2.4",
@@ -48,6 +53,9 @@
     "typescript": "^5"
   },
   "type": "module",
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "overrides": {
     "postcss": "8.5.19"
   }

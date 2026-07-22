@@ -7,9 +7,14 @@ import { WEEKDAY_CODES, WEEKDAY_LABELS, type WeekdayCode } from "@/lib/halaqat/w
 import type { ManagerDashboardData } from "@/lib/manager/types";
 import { StudentManagementPanel } from "@/components/students/student-management-panel";
 import { DailyMonitoringPanel } from "@/components/manager/daily-monitoring-panel";
+import { ManagerAlertsPanel } from "@/components/manager/manager-alerts-panel";
+import { StudentFollowUpPanel } from "@/components/manager/student-follow-up-panel";
+import { AuditLogPanel } from "@/components/manager/audit-log-panel";
+import { ParentReportSelector } from "@/components/reports/parent-report-selector";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import type { ManagerDailyMonitoringData } from "@/lib/manager-monitoring/types";
 
-type ActiveTab = "monitoring" | "halaqat" | "students" | "users";
+type ActiveTab = "monitoring" | "alerts" | "followup" | "parent_report" | "students" | "halaqat" | "users" | "audit";
 
 type ApiMessage = {
   message?: string;
@@ -113,6 +118,16 @@ export function ManagementPanel({
     }
   }
 
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmText?: string;
+    variant?: "danger" | "warning" | "info";
+    onConfirm: () => Promise<void> | void;
+  } | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+
   async function updateUserStatus(userId: string, status: "ACTIVE" | "DISABLED") {
     const key = `user-${userId}`;
     setBusyKey(key);
@@ -132,6 +147,26 @@ export function ManagementPanel({
       showResult("error", error instanceof Error ? error.message : "تعذر تحديث المستخدم.");
     } finally {
       setBusyKey(null);
+    }
+  }
+
+  function requestUserStatusToggle(userId: string, status: "ACTIVE" | "DISABLED", displayName: string) {
+    if (status === "DISABLED") {
+      setConfirmState({
+        isOpen: true,
+        title: "تأكيد إيقاف الحساب",
+        description: `هل تريد إيقاف حساب المستخدم (${displayName})؟ لن يستطيع تسجيل الدخول إلى اللوحة حتى إعادة التفعيل.`,
+        confirmText: "إيقاف الحساب",
+        variant: "danger",
+        onConfirm: async () => {
+          setConfirmLoading(true);
+          await updateUserStatus(userId, status);
+          setConfirmLoading(false);
+          setConfirmState(null);
+        },
+      });
+    } else {
+      void updateUserStatus(userId, status);
     }
   }
 
@@ -192,6 +227,26 @@ export function ManagementPanel({
     }
   }
 
+  function requestHalaqaStatusToggle(halaqaId: string, status: "ACTIVE" | "INACTIVE", halaqaName: string) {
+    if (status === "INACTIVE") {
+      setConfirmState({
+        isOpen: true,
+        title: "تأكيد تعطيل الحلقة",
+        description: `هل أنت تأكيد على تعطيل حلقة (${halaqaName})؟ لن يتم تسجيل جلسات جديدة في هذه الحلقة حتى إعادة التفعيل.`,
+        confirmText: "تعطيل الحلقة",
+        variant: "warning",
+        onConfirm: async () => {
+          setConfirmLoading(true);
+          await updateHalaqaStatus(halaqaId, status);
+          setConfirmLoading(false);
+          setConfirmState(null);
+        },
+      });
+    } else {
+      void updateHalaqaStatus(halaqaId, status);
+    }
+  }
+
   return (
     <div className="space-y-5">
       {notice ? (
@@ -214,23 +269,56 @@ export function ManagementPanel({
         <SummaryCard value={data.stats.totalUsers} label="مستخدم" />
       </div>
 
-      <div className="grid grid-cols-2 rounded-2xl border border-emerald-100 bg-white p-1 shadow-sm sm:grid-cols-4">
+      <div className="grid grid-cols-2 rounded-2xl border border-emerald-100 bg-white p-1 shadow-sm sm:grid-cols-4 lg:grid-cols-8">
         <TabButton active={activeTab === "monitoring"} onClick={() => setActiveTab("monitoring")}>
           المتابعة
         </TabButton>
-        <TabButton active={activeTab === "halaqat"} onClick={() => setActiveTab("halaqat")}>
-          الحلقات
+        <TabButton active={activeTab === "alerts"} onClick={() => setActiveTab("alerts")}>
+          التنبيهات
+        </TabButton>
+        <TabButton active={activeTab === "followup"} onClick={() => setActiveTab("followup")}>
+          متابعة الطلاب
+        </TabButton>
+        <TabButton active={activeTab === "parent_report"} onClick={() => setActiveTab("parent_report")}>
+          تقرير ولي الأمر
         </TabButton>
         <TabButton active={activeTab === "students"} onClick={() => setActiveTab("students")}>
           الطلاب
         </TabButton>
+        <TabButton active={activeTab === "halaqat"} onClick={() => setActiveTab("halaqat")}>
+          الحلقات
+        </TabButton>
         <TabButton active={activeTab === "users"} onClick={() => setActiveTab("users")}>
           المستخدمون
+        </TabButton>
+        <TabButton active={activeTab === "audit"} onClick={() => setActiveTab("audit")}>
+          سجل التدقيق
         </TabButton>
       </div>
 
       {activeTab === "monitoring" ? (
         <DailyMonitoringPanel initialData={monitoringData} />
+      ) : activeTab === "alerts" ? (
+        <ManagerAlertsPanel initialDate={monitoringData.date} />
+      ) : activeTab === "followup" ? (
+        <StudentFollowUpPanel
+          initialDate={monitoringData.date}
+          stages={data.stages}
+          halaqat={data.studentHalaqat}
+        />
+      ) : activeTab === "parent_report" ? (
+        <ParentReportSelector
+          title="تقرير ولي الأمر لكافة طلاب المركز"
+          description="استخرج تقرير المتابعة الخاص بأي طالب في المركز لشهر محدد وجاهز للطباعة مباشرة."
+          students={data.students.map((s) => ({
+            id: s.id,
+            displayName: s.displayName,
+            halaqaName: s.activeEnrollment?.halaqa.nameAr,
+            stageName: s.activeEnrollment?.halaqa.stageName,
+          }))}
+        />
+      ) : activeTab === "audit" ? (
+        <AuditLogPanel />
       ) : activeTab === "halaqat" ? (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
           <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
@@ -401,7 +489,7 @@ export function ManagementPanel({
                       : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
                   }`}
                   disabled={busyKey !== null}
-                  onClick={() => updateHalaqaStatus(halaqa.id, halaqa.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}
+                  onClick={() => requestHalaqaStatusToggle(halaqa.id, halaqa.status === "ACTIVE" ? "INACTIVE" : "ACTIVE", halaqa.nameAr)}
                 >
                   {busyKey === `halaqa-${halaqa.id}`
                     ? "جاري التحديث..."
@@ -513,7 +601,7 @@ export function ManagementPanel({
                       : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
                   }`}
                   disabled={busyKey !== null || user.isCurrentUser}
-                  onClick={() => updateUserStatus(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE")}
+                  onClick={() => requestUserStatusToggle(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE", user.displayName)}
                 >
                   {busyKey === `user-${user.id}`
                     ? "جاري التحديث..."
@@ -528,6 +616,19 @@ export function ManagementPanel({
           </section>
         </div>
       )}
+
+      {confirmState ? (
+        <ConfirmDialog
+          isOpen={confirmState.isOpen}
+          title={confirmState.title}
+          description={confirmState.description}
+          confirmText={confirmState.confirmText}
+          variant={confirmState.variant}
+          loading={confirmLoading}
+          onConfirm={confirmState.onConfirm}
+          onClose={() => setConfirmState(null)}
+        />
+      ) : null}
     </div>
   );
 }

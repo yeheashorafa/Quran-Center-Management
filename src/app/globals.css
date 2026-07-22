@@ -22,7 +22,7 @@ body {
   margin: 0;
   background: var(--page-background);
   color: var(--foreground);
-  font-family: Tahoma, Arial, sans-serif;
+  font-family: var(--font-tajawal), system-ui, -apple-system, sans-serif;
   text-rendering: optimizeLegibility;
 }
 

@@ -370,3 +370,92 @@ export async function PUT(request: Request, context: RouteContext) {
     return errorResponse("تعذر حفظ جلسة التسميع حالياً.", 500);
   }
 }
+
+export async function DELETE(request: Request, context: RouteContext) {
+  if (!isSameOriginRequest(request)) {
+    return errorResponse("تم رفض الطلب لأسباب أمنية.", 403);
+  }
+
+  const authorization = await authorizeApiPermission("sessions.manage.own");
+  if (authorization.response) return authorization.response;
+
+  const { halaqaId, sessionDate } = await context.params;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(halaqaId)) {
+    return errorResponse("معرف الحلقة غير صالح.", 400);
+  }
+  if (!isIsoDateOnly(sessionDate)) {
+    return errorResponse("التاريخ غير صالح.", 400);
+  }
+
+  const scope = await resolveTeacherScope({
+    userId: authorization.session.user.id,
+    halaqaId,
+    sessionDate,
+  });
+
+  if (!scope) {
+    return errorResponse("الحلقة غير موجودة ضمن الحلقات المعيّن عليها.", 404);
+  }
+
+  const session = await prisma.memorizationSession.findUnique({
+    where: { halaqaId_sessionDate: { halaqaId, sessionDate: scope.date } },
+    select: { id: true, status: true },
+  });
+
+  if (!session) {
+    return errorResponse("الجلسة غير موجودة أصلاً.", 404);
+  }
+  if (session.status === "LOCKED") {
+    return errorResponse("الجلسة مقفلة ولا يمكن حذفها.", 423);
+  }
+
+  const requestId = randomUUID();
+  const ipAddress = getRequestIp(request);
+  const userAgent = getRequestUserAgent(request);
+
+  try {
+    await prisma.$transaction(async (transaction) => {
+      const items = await transaction.sessionRecordItem.findMany({
+        where: { sessionId: session.id },
+        select: { id: true },
+      });
+      const itemIds = items.map((item) => item.id);
+
+      if (itemIds.length) {
+        await transaction.sessionActivity.deleteMany({
+          where: { itemId: { in: itemIds } },
+        });
+      }
+
+      await transaction.sessionRecordItem.deleteMany({
+        where: { sessionId: session.id },
+      });
+
+      await transaction.memorizationSession.delete({
+        where: { id: session.id },
+      });
+
+      await transaction.auditLog.create({
+        data: {
+          actorUserId: authorization.session.user.id,
+          action: "MEMORIZATION_SESSION_DELETED",
+          entityType: "memorization_session",
+          entityId: session.id,
+          requestId,
+          ipAddress,
+          userAgent,
+          newValues: {
+            halaqaId,
+            halaqaName: scope.halaqaName,
+            sessionDate,
+          },
+        },
+      });
+    });
+
+    return NextResponse.json({ message: "تم حذف الجلسة بالكامل مع كافة التسميعات المرتبطة بها." });
+  } catch (error) {
+    console.error("Delete memorization session failed:", error);
+    return errorResponse("تعذر حذف الجلسة حالياً.", 500);
+  }
+}

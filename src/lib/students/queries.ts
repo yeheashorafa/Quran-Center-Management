@@ -181,6 +181,44 @@ export async function getStudentProfileData(studentId: string): Promise<StudentP
             },
           },
         },
+        transfers: {
+          orderBy: [{ transferDate: "desc" }, { createdAt: "desc" }],
+          select: {
+            id: true,
+            transferDate: true,
+            note: true,
+            createdAt: true,
+            transferredByUser: { select: { displayName: true } },
+            fromEnrollment: {
+              select: {
+                id: true,
+                startedOn: true,
+                endedOn: true,
+                halaqa: {
+                  select: {
+                    id: true,
+                    nameAr: true,
+                    stage: { select: { nameAr: true } },
+                  },
+                },
+              },
+            },
+            toEnrollment: {
+              select: {
+                id: true,
+                startedOn: true,
+                endedOn: true,
+                halaqa: {
+                  select: {
+                    id: true,
+                    nameAr: true,
+                    stage: { select: { nameAr: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
         _count: {
           select: {
             sessionItems: true,
@@ -236,5 +274,32 @@ export async function getStudentProfileData(studentId: string): Promise<StudentP
       transfers: student._count.transfers,
     },
     availableHalaqat: availableHalaqat.map(mapHalaqaOption),
+    transferHistory: student.transfers.map((transfer) => ({
+      id: transfer.id,
+      transferDate: dateInputValue(transfer.transferDate)!,
+      note: transfer.note,
+      createdAt: transfer.createdAt.toISOString(),
+      transferredByName: transfer.transferredByUser?.displayName ?? null,
+      fromEnrollment: {
+        id: transfer.fromEnrollment.id,
+        startedOn: dateInputValue(transfer.fromEnrollment.startedOn)!,
+        endedOn: dateInputValue(transfer.fromEnrollment.endedOn),
+        halaqa: {
+          id: transfer.fromEnrollment.halaqa.id,
+          nameAr: transfer.fromEnrollment.halaqa.nameAr,
+          stageName: transfer.fromEnrollment.halaqa.stage?.nameAr ?? "غير محددة",
+        },
+      },
+      toEnrollment: {
+        id: transfer.toEnrollment.id,
+        startedOn: dateInputValue(transfer.toEnrollment.startedOn)!,
+        endedOn: dateInputValue(transfer.toEnrollment.endedOn),
+        halaqa: {
+          id: transfer.toEnrollment.halaqa.id,
+          nameAr: transfer.toEnrollment.halaqa.nameAr,
+          stageName: transfer.toEnrollment.halaqa.stage?.nameAr ?? "غير محددة",
+        },
+      },
+    })),
   };
 }

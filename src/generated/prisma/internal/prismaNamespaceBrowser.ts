@@ -71,7 +71,9 @@ export const ModelName = {
   SessionActivity: 'SessionActivity',
   OfficialExam: 'OfficialExam',
   OfficialExamScope: 'OfficialExamScope',
-  AuditLog: 'AuditLog'
+  AuditLog: 'AuditLog',
+  LegacyMigrationRun: 'LegacyMigrationRun',
+  LegacyIdMap: 'LegacyIdMap'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -419,6 +421,38 @@ export const AuditLogScalarFieldEnum = {
 } as const
 
 export type AuditLogScalarFieldEnum = (typeof AuditLogScalarFieldEnum)[keyof typeof AuditLogScalarFieldEnum]
+
+
+export const LegacyMigrationRunScalarFieldEnum = {
+  id: 'id',
+  sourceSystem: 'sourceSystem',
+  sourceFingerprint: 'sourceFingerprint',
+  status: 'status',
+  dryRun: 'dryRun',
+  inputManifest: 'inputManifest',
+  summary: 'summary',
+  errorMessage: 'errorMessage',
+  startedAt: 'startedAt',
+  completedAt: 'completedAt',
+  createdAt: 'createdAt'
+} as const
+
+export type LegacyMigrationRunScalarFieldEnum = (typeof LegacyMigrationRunScalarFieldEnum)[keyof typeof LegacyMigrationRunScalarFieldEnum]
+
+
+export const LegacyIdMapScalarFieldEnum = {
+  id: 'id',
+  runId: 'runId',
+  sourceSystem: 'sourceSystem',
+  entityType: 'entityType',
+  legacyId: 'legacyId',
+  newId: 'newId',
+  canonicalKey: 'canonicalKey',
+  metadata: 'metadata',
+  createdAt: 'createdAt'
+} as const
+
+export type LegacyIdMapScalarFieldEnum = (typeof LegacyIdMapScalarFieldEnum)[keyof typeof LegacyIdMapScalarFieldEnum]
 
 
 export const SortOrder = {

@@ -1,3 +1,5 @@
+import type { StudentTransferHistoryItem } from "@/lib/student-transfers/types";
+
 export type StudentHalaqaOption = {
   id: string;
   nameAr: string;
@@ -46,6 +48,7 @@ export type StudentProfileData = {
     transfers: number;
   };
   availableHalaqat: StudentHalaqaOption[];
+  transferHistory: StudentTransferHistoryItem[];
 };
 
 export type StudentProfileEnrollment = {

@@ -417,7 +417,9 @@ export const ModelName = {
   SessionActivity: 'SessionActivity',
   OfficialExam: 'OfficialExam',
   OfficialExamScope: 'OfficialExamScope',
-  AuditLog: 'AuditLog'
+  AuditLog: 'AuditLog',
+  LegacyMigrationRun: 'LegacyMigrationRun',
+  LegacyIdMap: 'LegacyIdMap'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -433,7 +435,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "role" | "permission" | "userRole" | "rolePermission" | "authSession" | "program" | "stage" | "stageDefaultSchedule" | "halaqa" | "halaqaSchedule" | "halaqaStaffAssignment" | "student" | "studentEnrollment" | "studentTransfer" | "memorizationSession" | "sessionRecordItem" | "sessionActivity" | "officialExam" | "officialExamScope" | "auditLog"
+    modelProps: "user" | "role" | "permission" | "userRole" | "rolePermission" | "authSession" | "program" | "stage" | "stageDefaultSchedule" | "halaqa" | "halaqaSchedule" | "halaqaStaffAssignment" | "student" | "studentEnrollment" | "studentTransfer" | "memorizationSession" | "sessionRecordItem" | "sessionActivity" | "officialExam" | "officialExamScope" | "auditLog" | "legacyMigrationRun" | "legacyIdMap"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1991,6 +1993,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    LegacyMigrationRun: {
+      payload: Prisma.$LegacyMigrationRunPayload<ExtArgs>
+      fields: Prisma.LegacyMigrationRunFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.LegacyMigrationRunFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyMigrationRunPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.LegacyMigrationRunFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyMigrationRunPayload>
+        }
+        findFirst: {
+          args: Prisma.LegacyMigrationRunFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyMigrationRunPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.LegacyMigrationRunFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyMigrationRunPayload>
+        }
+        findMany: {
+          args: Prisma.LegacyMigrationRunFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyMigrationRunPayload>[]
+        }
+        create: {
+          args: Prisma.LegacyMigrationRunCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyMigrationRunPayload>
+        }
+        createMany: {
+          args: Prisma.LegacyMigrationRunCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.LegacyMigrationRunCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyMigrationRunPayload>[]
+        }
+        delete: {
+          args: Prisma.LegacyMigrationRunDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyMigrationRunPayload>
+        }
+        update: {
+          args: Prisma.LegacyMigrationRunUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyMigrationRunPayload>
+        }
+        deleteMany: {
+          args: Prisma.LegacyMigrationRunDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.LegacyMigrationRunUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.LegacyMigrationRunUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyMigrationRunPayload>[]
+        }
+        upsert: {
+          args: Prisma.LegacyMigrationRunUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyMigrationRunPayload>
+        }
+        aggregate: {
+          args: Prisma.LegacyMigrationRunAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateLegacyMigrationRun>
+        }
+        groupBy: {
+          args: Prisma.LegacyMigrationRunGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.LegacyMigrationRunGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.LegacyMigrationRunCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.LegacyMigrationRunCountAggregateOutputType> | number
+        }
+      }
+    }
+    LegacyIdMap: {
+      payload: Prisma.$LegacyIdMapPayload<ExtArgs>
+      fields: Prisma.LegacyIdMapFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.LegacyIdMapFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyIdMapPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.LegacyIdMapFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyIdMapPayload>
+        }
+        findFirst: {
+          args: Prisma.LegacyIdMapFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyIdMapPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.LegacyIdMapFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyIdMapPayload>
+        }
+        findMany: {
+          args: Prisma.LegacyIdMapFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyIdMapPayload>[]
+        }
+        create: {
+          args: Prisma.LegacyIdMapCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyIdMapPayload>
+        }
+        createMany: {
+          args: Prisma.LegacyIdMapCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.LegacyIdMapCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyIdMapPayload>[]
+        }
+        delete: {
+          args: Prisma.LegacyIdMapDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyIdMapPayload>
+        }
+        update: {
+          args: Prisma.LegacyIdMapUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyIdMapPayload>
+        }
+        deleteMany: {
+          args: Prisma.LegacyIdMapDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.LegacyIdMapUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.LegacyIdMapUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyIdMapPayload>[]
+        }
+        upsert: {
+          args: Prisma.LegacyIdMapUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$LegacyIdMapPayload>
+        }
+        aggregate: {
+          args: Prisma.LegacyIdMapAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateLegacyIdMap>
+        }
+        groupBy: {
+          args: Prisma.LegacyIdMapGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.LegacyIdMapGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.LegacyIdMapCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.LegacyIdMapCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -2359,6 +2509,38 @@ export const AuditLogScalarFieldEnum = {
 } as const
 
 export type AuditLogScalarFieldEnum = (typeof AuditLogScalarFieldEnum)[keyof typeof AuditLogScalarFieldEnum]
+
+
+export const LegacyMigrationRunScalarFieldEnum = {
+  id: 'id',
+  sourceSystem: 'sourceSystem',
+  sourceFingerprint: 'sourceFingerprint',
+  status: 'status',
+  dryRun: 'dryRun',
+  inputManifest: 'inputManifest',
+  summary: 'summary',
+  errorMessage: 'errorMessage',
+  startedAt: 'startedAt',
+  completedAt: 'completedAt',
+  createdAt: 'createdAt'
+} as const
+
+export type LegacyMigrationRunScalarFieldEnum = (typeof LegacyMigrationRunScalarFieldEnum)[keyof typeof LegacyMigrationRunScalarFieldEnum]
+
+
+export const LegacyIdMapScalarFieldEnum = {
+  id: 'id',
+  runId: 'runId',
+  sourceSystem: 'sourceSystem',
+  entityType: 'entityType',
+  legacyId: 'legacyId',
+  newId: 'newId',
+  canonicalKey: 'canonicalKey',
+  metadata: 'metadata',
+  createdAt: 'createdAt'
+} as const
+
+export type LegacyIdMapScalarFieldEnum = (typeof LegacyIdMapScalarFieldEnum)[keyof typeof LegacyIdMapScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -2852,6 +3034,8 @@ export type GlobalOmitConfig = {
   officialExam?: Prisma.OfficialExamOmit
   officialExamScope?: Prisma.OfficialExamScopeOmit
   auditLog?: Prisma.AuditLogOmit
+  legacyMigrationRun?: Prisma.LegacyMigrationRunOmit
+  legacyIdMap?: Prisma.LegacyIdMapOmit
 }
 
 /* Types for Logging */

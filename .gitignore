@@ -44,3 +44,8 @@ next-env.d.ts
 !.env.example
 
 # Generated Prisma Client is committed for predictable builds
+
+# Legacy exports contain personal data and plaintext PINs
+legacy-data/*.csv
+migration-output/*.json
+migration-output/*.csv

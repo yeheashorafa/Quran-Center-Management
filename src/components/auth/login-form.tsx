@@ -4,13 +4,21 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { ChevronDown, Eye, EyeOff } from "lucide-react";
 import { loginRoles } from "@/config/app";
 import { loginSchema, type LoginInput } from "@/lib/auth/schemas";
 import type { LoginOptionsResponse } from "@/lib/auth/types";
 
 function LockIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="size-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <rect x="4" y="10" width="16" height="10" rx="2" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3" />
     </svg>
@@ -19,7 +27,14 @@ function LockIcon() {
 
 function UserIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="size-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <circle cx="12" cy="8" r="4" />
       <path d="M4 21a8 8 0 0 1 16 0" />
     </svg>
@@ -28,10 +43,15 @@ function UserIcon() {
 
 export function LoginForm() {
   const router = useRouter();
-  const [options, setOptions] = useState<LoginOptionsResponse>({ stages: [], users: [] });
+
+  const [options, setOptions] = useState<LoginOptionsResponse>({
+    stages: [],
+    users: [],
+  });
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsError, setOptionsError] = useState("");
   const [serverError, setServerError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -60,15 +80,20 @@ export function LoginForm() {
       try {
         setOptionsLoading(true);
         setOptionsError("");
+
         const response = await fetch("/api/auth/options", {
           cache: "no-store",
           signal: controller.signal,
         });
 
-        if (!response.ok) throw new Error("تعذر تحميل المستخدمين.");
-        setOptions((await response.json()) as LoginOptionsResponse);
+        if (!response.ok) throw new Error("تعذر تحميل قائمة المستخدمين.");
+
+        const json = (await response.json()) as LoginOptionsResponse;
+        setOptions(json);
       } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
+
         setOptionsError("تعذر الاتصال بقاعدة البيانات وتحميل المستخدمين.");
       } finally {
         setOptionsLoading(false);
@@ -76,6 +101,7 @@ export function LoginForm() {
     }
 
     void loadOptions();
+
     return () => controller.abort();
   }, []);
 
@@ -84,12 +110,31 @@ export function LoginForm() {
       options.users.filter(
         (user) =>
           user.roles.includes(role) &&
-          (role !== "TEACHER" || (stageId ? user.stageIds.includes(stageId) : false)),
+          (role !== "TEACHER" ||
+            (stageId ? user.stageIds.includes(stageId) : true)),
       ),
     [options.users, role, stageId],
   );
 
-  const selectedRole = loginRoles.find((item) => item.value === role);
+  useEffect(() => {
+    if (role === "CENTER_MANAGER") {
+      const manager = options.users.find((user) =>
+        user.roles.includes("CENTER_MANAGER"),
+      );
+
+      if (manager) {
+        setValue("userId", manager.id, { shouldValidate: true });
+      }
+    } else if (role === "EXAMINER") {
+      const examiner = options.users.find((user) =>
+        user.roles.includes("EXAMINER"),
+      );
+
+      if (examiner) {
+        setValue("userId", examiner.id, { shouldValidate: true });
+      }
+    }
+  }, [role, options.users, setValue]);
 
   async function onSubmit(input: LoginInput) {
     setServerError("");
@@ -101,12 +146,15 @@ export function LoginForm() {
       body: JSON.stringify(input),
     });
 
-    const payload = (await response.json().catch(() => null)) as
-      | { message?: string; redirectTo?: string }
-      | null;
+    const payload = (await response.json().catch(() => null)) as {
+      message?: string;
+      redirectTo?: string;
+    } | null;
 
     if (!response.ok || !payload?.redirectTo) {
-      setServerError(payload?.message ?? "تعذر تسجيل الدخول. حاول مرة أخرى.");
+      setServerError(
+        payload?.message ?? "تعذر تسجيل الدخول. تأكد من كلمة المرور.",
+      );
       return;
     }
 
@@ -117,10 +165,14 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
       <fieldset disabled={isSubmitting}>
-        <legend className="mb-2 text-sm font-bold text-slate-800">نوع الدخول</legend>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {/* <legend className="mb-2 text-xs font-black text-slate-800">
+          اختر دورك في المركز:
+        </legend> */}
+
+        <div className="grid grid-cols-3 gap-2">
           {loginRoles.map((item) => {
             const active = item.value === role;
+
             return (
               <button
                 key={item.value}
@@ -132,137 +184,201 @@ export function LoginForm() {
                   setValue("userId", "");
                   setServerError("");
                 }}
-                className={`rounded-2xl border px-3 py-3 text-right transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-100 ${
+                className={`flex flex-col items-center justify-center rounded-2xl border p-3 text-center transition-all ${
                   active
-                    ? "border-[var(--brand-green)] bg-emerald-50 text-[var(--brand-green)] shadow-sm"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50/40"
+                    ? "border-emerald-700 bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50/50"
                 }`}
               >
-                <span className="block text-sm font-extrabold">{item.label}</span>
-                <span className="mt-1 block text-[11px] leading-5 text-slate-500">
-                  {item.description}
+                <span className="mb-1 text-xl">
+                  {item.value === "CENTER_MANAGER"
+                    ? "🏛️"
+                    : item.value === "EXAMINER"
+                      ? "📝"
+                      : "📖"}
                 </span>
+
+                <span className="text-xs font-black">{item.label}</span>
               </button>
             );
           })}
         </div>
       </fieldset>
 
+      {/* {role === "CENTER_MANAGER" ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-xs font-bold text-emerald-950">
+          👑 دخول مدير المركز الإداري — أدخل كلمة المرور الخاصة بالإدارة.
+        </div>
+      ) : role === "EXAMINER" ? (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-3.5 text-xs font-bold text-blue-950">
+          📝 دخول المختبر الرسمي للمركز — أدخل كلمة المرور الخاصة بالممتحن.
+        </div>
+      ) : null} */}
+
       {role === "TEACHER" ? (
-        <div>
-          <label htmlFor="stageId" className="form-label">المرحلة</label>
-          <select
-            id="stageId"
-            className="form-control"
-            disabled={optionsLoading || isSubmitting}
-            {...register("stageId", {
-              onChange: () => {
-                setValue("userId", "");
-                setServerError("");
-              },
-            })}
-          >
-            <option value="">اختر المرحلة</option>
-            {options.stages.map((stage) => (
-              <option key={stage.id} value={stage.id}>{stage.label}</option>
-            ))}
-          </select>
-          {errors.stageId ? <p className="mt-2 text-xs font-bold text-red-700">{errors.stageId.message}</p> : null}
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="stageId" className="form-label">
+              إختر المرحلة  (البراعم - الأشبال - الناشئيين)
+            </label>
+
+            <div className="relative">
+              <select
+                id="stageId"
+                className="form-control appearance-none pr-4 pl-12 font-bold text-xs"
+                disabled={optionsLoading || isSubmitting}
+                {...register("stageId", {
+                  onChange: () => {
+                    setValue("userId", "");
+                    setServerError("");
+                  },
+                })}
+              >
+                <option value="">جميع المراحل</option>
+
+                {options.stages.map((stage) => (
+                  <option key={stage.id} value={stage.id}>
+                    {stage.label}
+                  </option>
+                ))}
+              </select>
+
+              <span className="pointer-events-none absolute inset-y-0 left-0 flex w-12 items-center justify-center text-emerald-800">
+                <ChevronDown className="size-5" />
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="userId" className="form-label">
+              إسم المحفّظ
+            </label>
+
+            <div className="flex h-12 w-full items-center overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 transition focus-within:border-emerald-700 focus-within:ring-4 focus-within:ring-emerald-100">
+              <span className="flex h-full w-12 shrink-0 items-center justify-center text-slate-400">
+                <UserIcon />
+              </span>
+
+              <select
+                id="userId"
+                dir="rtl"
+                className="h-full min-w-0 flex-1 appearance-none bg-transparent px-1 text-right text-xs font-bold outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                disabled={optionsLoading || isSubmitting}
+                {...register("userId")}
+              >
+                <option value="">
+                  {optionsLoading ? "جاري تحميل قائمة الشيوخ..." : "اختر الشيخ"}
+                </option>
+
+                {visibleUsers.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.displayName}
+                  </option>
+                ))}
+              </select>
+
+              <span className="flex h-full w-12 shrink-0 items-center justify-center text-emerald-800">
+                <ChevronDown className="size-5" />
+              </span>
+            </div>
+
+            {errors.userId ? (
+              <p className="mt-1.5 text-xs font-bold text-red-700">
+                {errors.userId.message}
+              </p>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
       <div>
-        <label htmlFor="userId" className="form-label">
-          {role === "TEACHER" ? "اسم الشيخ" : "اسم المستخدم"}
+        <label htmlFor="password" className="form-label">
+          كلمة المرور
         </label>
-        <div className="relative">
-          <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
-            <UserIcon />
+
+        <div className="flex h-12 w-full items-center overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 transition focus-within:border-emerald-700 focus-within:ring-4 focus-within:ring-emerald-100">
+          <span className="flex h-full w-12 shrink-0 items-center justify-center text-slate-400">
+            <LockIcon />
           </span>
-          <select
-            id="userId"
-            className="form-control pr-11"
-            disabled={optionsLoading || isSubmitting || (role === "TEACHER" && !stageId)}
-            {...register("userId")}
+
+          <input
+            id="password"
+            dir="rtl"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            disabled={isSubmitting}
+            className="h-full min-w-0 flex-1 bg-transparent px-1 text-right font-bold tracking-wide outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+            placeholder="أدخل كلمة المرور"
+            {...register("password")}
+          />
+
+          <button
+            type="button"
+            onClick={() => setShowPassword((current) => !current)}
+            disabled={isSubmitting}
+            className="flex h-full w-12 shrink-0 items-center justify-center text-slate-400 transition hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={
+              showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"
+            }
           >
-            <option value="">
-              {optionsLoading
-                ? "جاري تحميل المستخدمين..."
-                : role === "TEACHER" && !stageId
-                  ? "اختر المرحلة أولاً"
-                  : "اختر المستخدم"}
-            </option>
-            {visibleUsers.map((user) => (
-              <option key={user.id} value={user.id}>{user.displayName}</option>
-            ))}
-          </select>
+            {showPassword ? (
+              <EyeOff className="size-5" />
+            ) : (
+              <Eye className="size-5" />
+            )}
+          </button>
         </div>
-        {errors.userId ? <p className="mt-2 text-xs font-bold text-red-700">{errors.userId.message}</p> : null}
-        {!optionsLoading && !optionsError && (role !== "TEACHER" || stageId) && visibleUsers.length === 0 ? (
-          <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
-            لا يوجد مستخدم نشط لهذا الاختيار حتى الآن.
+
+        {errors.password ? (
+          <p className="mt-1.5 text-xs font-bold text-red-700">
+            {errors.password.message}
           </p>
         ) : null}
       </div>
 
-      <div>
-        <label htmlFor="password" className="form-label">كلمة الدخول</label>
-        <div className="relative">
-          <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
-            <LockIcon />
-          </span>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            disabled={isSubmitting}
-            className="form-control pr-11"
-            placeholder="أدخل كلمة الدخول"
-            {...register("password")}
-          />
-        </div>
-        {errors.password ? <p className="mt-2 text-xs font-bold text-red-700">{errors.password.message}</p> : null}
-      </div>
-
-      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+      <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 text-xs font-bold text-slate-700">
         <input
           type="checkbox"
           disabled={isSubmitting}
-          className="mt-1 size-4 accent-[var(--brand-green)]"
+          className="size-4 rounded-md accent-emerald-900"
           {...register("rememberDevice")}
         />
-        <span>
-          <span className="block text-sm font-bold text-slate-800">تذكر هذا الجهاز</span>
-          <span className="mt-1 block text-xs leading-5 text-slate-500">
-            لن تُحفظ كلمة الدخول. سيُحفظ رمز جلسة آمن داخل Cookie محمية فقط.
-          </span>
-        </span>
+
+        <span>تذكر هذا الجهاز للجلسات القادمة</span>
       </label>
 
       {optionsError ? (
-        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-xs font-semibold leading-6 text-red-800">
-          {optionsError}
+        <div
+          role="alert"
+          className="rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-extrabold text-red-800"
+        >
+          ⚠️ {optionsError}
         </div>
       ) : null}
 
       {serverError ? (
-        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-xs font-semibold leading-6 text-red-800">
-          {serverError}
+        <div
+          role="alert"
+          className="rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-extrabold text-red-800"
+        >
+          ⚠️ {serverError}
         </div>
       ) : null}
 
       <button
         type="submit"
         disabled={isSubmitting || optionsLoading || Boolean(optionsError)}
-        className="flex min-h-12 w-full items-center justify-center rounded-2xl bg-[var(--brand-green)] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-950/15 transition hover:bg-[var(--brand-green-dark)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex min-h-12 w-full items-center justify-center rounded-2xl bg-emerald-900 px-5 py-3 text-sm font-black text-white shadow-lg shadow-emerald-950/15 transition hover:bg-emerald-950 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isSubmitting ? "جاري التحقق..." : "دخول إلى النظام"}
+        {isSubmitting ? (
+          <span className="flex items-center gap-2">
+            <span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <span>جاري التحقق والدخول...</span>
+          </span>
+        ) : (
+          "تسجيل الدخول للنظام"
+        )}
       </button>
-
-      <div className="rounded-xl bg-slate-50 px-3 py-3 text-center text-xs leading-6 text-slate-500">
-        الدخول المحدد: <strong className="text-slate-700">{selectedRole?.label}</strong>
-        {stageId ? <span> — {options.stages.find((stage) => stage.id === stageId)?.label}</span> : null}
-      </div>
     </form>
   );
 }

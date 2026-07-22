@@ -11,7 +11,7 @@ export const stages = [
 ] as const;
 
 export const loginRoles = [
-  { value: "TEACHER", label: "الشيخ / المحفّظ", description: "تسجيل التسميع ومتابعة طلاب الحلقة" },
+  { value: "TEACHER", label: "المحفّظ", description: "تسجيل التسميع ومتابعة طلاب الحلقة" },
   { value: "CENTER_MANAGER", label: "مدير المركز", description: "إدارة الحلقات والطلاب والتقارير" },
   { value: "EXAMINER", label: "المختبر", description: "تسجيل ومتابعة الاختبارات الرسمية" },
 ] as const;
