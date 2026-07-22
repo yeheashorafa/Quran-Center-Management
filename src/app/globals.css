@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  --brand-green: #07583a;
+  --brand-green-dark: #03472f;
+  --brand-gold: #c79a28;
+  --brand-gold-dark: #9a7117;
+  --page-background: #f3f7f4;
+  --foreground: #17231d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--page-background);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--page-background);
+  color: var(--foreground);
+  font-family: Tahoma, Arial, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #1e293b;
+  font-size: 0.875rem;
+  font-weight: 800;
+}
+
+.form-control {
+  min-height: 3rem;
+  width: 100%;
+  border: 1px solid #dbe3de;
+  border-radius: 1rem;
+  background: #ffffff;
+  padding: 0.75rem 1rem;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.form-control::placeholder {
+  color: #94a3b8;
+}
+
+.form-control:focus {
+  border-color: var(--brand-green);
+  box-shadow: 0 0 0 4px rgb(16 185 129 / 0.12);
+}
