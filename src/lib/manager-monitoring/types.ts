@@ -35,6 +35,11 @@ export type ManagerDailyHalaqaMonitoringItem = {
     updatedAt: string;
     completedAt: string | null;
   } | null;
+  lastSyncedSession?: {
+    sessionDate: string;
+    updatedAt: string;
+    daysAgo: number;
+  } | null;
   attendance: MonitoringAttendanceSummary;
   activities: MonitoringActivitySummary;
 };
@@ -54,5 +59,12 @@ export type ManagerDailyMonitoringData = {
     attendance: MonitoringAttendanceSummary;
     activities: MonitoringActivitySummary;
   };
+  staleHalaqatAlerts?: Array<{
+    halaqaId: string;
+    halaqaName: string;
+    teacherName: string;
+    daysAgo: number;
+    lastSessionDate: string | null;
+  }>;
   halaqat: ManagerDailyHalaqaMonitoringItem[];
 };

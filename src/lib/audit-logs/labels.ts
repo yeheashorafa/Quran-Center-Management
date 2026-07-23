@@ -16,6 +16,8 @@ const ACTION_LABELS: Record<string, string> = {
   STUDENT_TRANSFERRED: "نقل طالب",
   MEMORIZATION_SESSION_ITEMS_SAVED: "حفظ سجلات جلسة",
   MEMORIZATION_SESSION_COMPLETED: "اعتماد جلسة تسميع",
+  MEMORIZATION_SESSION_DELETED: "حذف جلسة تسميع بالكامل",
+  STUDENT_SESSION_RECITATION_DELETED: "حذف تسميع طالب من جلسة",
   OFFICIAL_EXAM_CREATED: "إنشاء اختبار رسمي",
   OFFICIAL_EXAM_UPDATED: "تعديل اختبار رسمي",
   OFFICIAL_EXAM_VOIDED: "إلغاء اختبار رسمي",

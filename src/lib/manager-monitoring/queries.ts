@@ -108,6 +108,33 @@ export async function getManagerDailyMonitoringData(
     },
   });
 
+  const halaqatIds = halaqat.map((h) => h.id);
+  const latestSessions = halaqatIds.length
+    ? await prisma.memorizationSession.findMany({
+        where: {
+          halaqaId: { in: halaqatIds },
+          deletedAt: null,
+        },
+        orderBy: { sessionDate: "desc" },
+        distinct: ["halaqaId"],
+        select: {
+          halaqaId: true,
+          sessionDate: true,
+          updatedAt: true,
+        },
+      })
+    : [];
+
+  const latestMap = new Map(latestSessions.map((s) => [s.halaqaId, s]));
+
+  const staleHalaqatAlerts: Array<{
+    halaqaId: string;
+    halaqaName: string;
+    teacherName: string;
+    daysAgo: number;
+    lastSessionDate: string | null;
+  }> = [];
+
   const mappedHalaqat: ManagerDailyHalaqaMonitoringItem[] = halaqat.map((halaqa) => {
     const session = halaqa.sessions[0] ?? null;
     const attendance = emptyAttendance();
@@ -142,6 +169,40 @@ export async function getManagerDailyMonitoringData(
       monitoringStatus = session.status;
     }
 
+    // Compute last synced session information across all history
+    const latest = latestMap.get(halaqa.id) ?? null;
+    let lastSyncedSession = null;
+    if (latest) {
+      const latestDateStr = latest.sessionDate.toISOString().slice(0, 10);
+      const targetTime = new Date(dateValue).getTime();
+      const latestTime = new Date(latestDateStr).getTime();
+      const diffDays = Math.max(0, Math.floor((targetTime - latestTime) / (1000 * 60 * 60 * 24)));
+
+      lastSyncedSession = {
+        sessionDate: latestDateStr,
+        updatedAt: latest.updatedAt.toISOString(),
+        daysAgo: diffDays,
+      };
+
+      if (diffDays >= 3) {
+        staleHalaqatAlerts.push({
+          halaqaId: halaqa.id,
+          halaqaName: halaqa.nameAr,
+          teacherName: halaqa.staffAssignments[0]?.user?.displayName || "الشيخ",
+          daysAgo: diffDays,
+          lastSessionDate: latestDateStr,
+        });
+      }
+    } else {
+      staleHalaqatAlerts.push({
+        halaqaId: halaqa.id,
+        halaqaName: halaqa.nameAr,
+        teacherName: halaqa.staffAssignments[0]?.user?.displayName || "الشيخ",
+        daysAgo: 999,
+        lastSessionDate: null,
+      });
+    }
+
     return {
       id: halaqa.id,
       nameAr: halaqa.nameAr,
@@ -159,6 +220,7 @@ export async function getManagerDailyMonitoringData(
             completedAt: session.completedAt?.toISOString() ?? null,
           }
         : null,
+      lastSyncedSession,
       attendance,
       activities,
     };
@@ -198,6 +260,7 @@ export async function getManagerDailyMonitoringData(
       attendance: totalAttendance,
       activities: totalActivities,
     },
+    staleHalaqatAlerts,
     halaqat: mappedHalaqat,
   };
 }

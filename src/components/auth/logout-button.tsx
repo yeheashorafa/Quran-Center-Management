@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { clearOfflineProfiles } from "@/lib/offline/offline-profile";
+import { clearTeacherDataCache } from "@/lib/offline/teacher-cache";
+import { clearExaminerDataCache } from "@/lib/offline/examiner-cache";
 
 export function LogoutButton() {
   const router = useRouter();
@@ -13,7 +16,10 @@ export function LogoutButton() {
       await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "same-origin",
-      });
+      }).catch(() => {});
+      await clearOfflineProfiles();
+      await clearTeacherDataCache();
+      await clearExaminerDataCache();
     } finally {
       router.replace("/login");
       router.refresh();
@@ -24,9 +30,9 @@ export function LogoutButton() {
   return (
     <button
       type="button"
-      onClick={logout}
+      onClick={() => void logout()}
       disabled={isPending}
-      className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-extrabold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+      className="rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3.5 py-2 text-xs font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:opacity-60"
     >
       {isPending ? "جاري الخروج..." : "تسجيل الخروج"}
     </button>

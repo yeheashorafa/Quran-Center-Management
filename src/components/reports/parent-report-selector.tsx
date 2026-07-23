@@ -30,6 +30,11 @@ export function ParentReportSelector({
   const [reportData, setReportData] = useState<ParentReportData | null>(null);
 
   async function fetchReport() {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setError("التقارير والتصدير تحتاج اتصالاً بالإنترنت.");
+      return;
+    }
+
     if (!selectedStudentId) {
       setError("اختر الطالب أولاً.");
       return;
@@ -56,17 +61,17 @@ export function ParentReportSelector({
   }
 
   return (
-    <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-6">
+    <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-6 text-[var(--text-main)] transition-colors duration-200" dir="rtl">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <span className="text-xs font-bold text-emerald-800">تقارير المتابعة</span>
-          <h2 className="text-xl font-black text-slate-950">{title}</h2>
-          <p className="mt-1 text-sm text-slate-500">{description}</p>
+          <span className="text-xs font-bold text-[var(--gold)]">تقارير المتابعة</span>
+          <h2 className="text-xl font-black text-[var(--text-main)]">{title}</h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">{description}</p>
         </div>
       </div>
 
       {error ? (
-        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-800">
+        <div className="mt-4 rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-3 text-xs font-bold text-[var(--status-danger-text)]">
           ⚠️ {error}
         </div>
       ) : null}
@@ -111,7 +116,7 @@ export function ParentReportSelector({
           type="button"
           disabled={loading || !selectedStudentId}
           onClick={fetchReport}
-          className="min-h-12 w-full rounded-2xl bg-emerald-900 px-5 text-sm font-black text-white shadow-sm transition hover:bg-emerald-950 disabled:opacity-40"
+          className="min-h-12 w-full rounded-2xl bg-[var(--primary)] px-5 text-sm font-black text-white shadow-sm transition hover:bg-[var(--primary-dark)] disabled:opacity-40"
         >
           {loading ? "جاري تجهيز تقرير ولي الأمر..." : "📜 عرض وتوليد تقرير ولي الأمر"}
         </button>

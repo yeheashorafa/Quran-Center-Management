@@ -6,6 +6,12 @@ import { MonthlyReportsPanel } from "@/components/reports/monthly-reports-panel"
 import { SessionDetailModal, type SessionDetailData } from "@/components/sessions/session-detail-modal";
 import { TeacherStudentsPanel } from "@/components/teacher/teacher-students-panel";
 import { QURAN_SURAHS, calculateAyahPageCount } from "@/lib/quran/metadata";
+import { NetworkStatusBar } from "@/components/offline/network-status-bar";
+import { getSessionDraft, removeSessionDraft, saveSessionDraft, type SessionDraftRecord } from "@/lib/offline/session-drafts";
+import { enqueueSyncItem, getAllSyncItems, type SyncQueueItem } from "@/lib/offline/sync-queue";
+import { getTeacherDataCache, saveTeacherDataCache } from "@/lib/offline/teacher-cache";
+import { getOfflineTeacherProfile, saveOfflineTeacherProfile } from "@/lib/offline/offline-profile";
+import { PendingSessionsList } from "@/components/offline/pending-sessions-list";
 import type {
   SessionActivityCode,
   SessionAttendanceCode,
@@ -68,6 +74,14 @@ export function TeacherSessionPanel({
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
 
+  // Offline status & cache metadata
+  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
+  const [lastCacheTime, setLastCacheTime] = useState<string | null>(null);
+
+  // Local Draft & Queue state
+  const [pendingDraft, setPendingDraft] = useState<SessionDraftRecord | null>(null);
+  const [offlineSyncItems, setOfflineSyncItems] = useState<SyncQueueItem[]>([]);
+
   // History inspection Modal state
   const [selectedHistorySession, setSelectedHistorySession] = useState<SessionDetailData | null>(null);
 
@@ -83,7 +97,17 @@ export function TeacherSessionPanel({
     queueMicrotask(() => {
       setLoading(true);
       setNotice(null);
+      setPendingDraft(null);
     });
+
+    // Check IndexedDB draft & queue items
+    void getSessionDraft("teacher", halaqaId, sessionDate).then((draft) => {
+      if (draft && draft.students.length > 0) {
+        setPendingDraft(draft);
+      }
+    });
+
+    void getAllSyncItems().then(setOfflineSyncItems);
 
     fetch(`/api/teacher/sessions/${halaqaId}/${sessionDate}`, {
       signal: controller.signal,
@@ -97,27 +121,100 @@ export function TeacherSessionPanel({
         const data = payload as TeacherSessionEditorData;
         setEditor(data);
         setStudents(data.students);
+        setIsOfflineMode(false);
+
+        const nowStr = new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }) + " - " + new Date().toLocaleDateString("ar-EG");
+        setLastCacheTime(nowStr);
+
+        // Cache online data to IndexedDB for offline use
+        void saveTeacherDataCache("teacher", halaqaId, dashboard, data.students, data);
+        void saveOfflineTeacherProfile({
+          teacherId: "teacher",
+          halaqaId,
+          teacherName: "الشيخ",
+          halaqaName: data.halaqa.nameAr,
+          cachedAt: Date.now(),
+          lastOnlineLoginAt: Date.now(),
+        });
 
         // Default first student expanded for mobile
         if (data.students.length > 0) {
           setExpandedStudentId(data.students[0]!.studentId);
         }
       })
-      .catch((error) => {
+      .catch(async (error) => {
         if (controller.signal.aborted) return;
-        setEditor(null);
-        setStudents([]);
-        setNotice({
-          type: "error",
-          text: error instanceof Error ? error.message : "تعذر تحميل الجلسة.",
-        });
+
+        // Fallback to local IndexedDB cache when offline or fetch fails
+        const cache = await getTeacherDataCache("teacher", halaqaId);
+        const profile = await getOfflineTeacherProfile();
+
+        if (cache && cache.students.length > 0) {
+          setStudents(cache.students);
+          setEditor(
+            cache.editor || {
+              allowed: true,
+              reason: null,
+              date: sessionDate,
+              weekday: "SUNDAY",
+              weekdayLabel: "الأحد",
+              halaqa: {
+                id: halaqaId,
+                nameAr: profile?.halaqaName || selectedHalaqa?.nameAr || "الحلقة",
+                stageName: selectedHalaqa?.stageName || "",
+                weekdays: selectedHalaqa?.weekdays || [],
+              },
+              session: null,
+              students: cache.students,
+            },
+          );
+          setIsOfflineMode(true);
+          const cacheDateStr = new Date(cache.cachedAt).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }) + " - " + new Date(cache.cachedAt).toLocaleDateString("ar-EG");
+          setLastCacheTime(cacheDateStr);
+
+          if (cache.students.length > 0) {
+            setExpandedStudentId(cache.students[0]!.studentId);
+          }
+        } else {
+          setEditor(null);
+          setStudents([]);
+          setIsOfflineMode(true);
+          setNotice({
+            type: "error",
+            text: error instanceof Error ? error.message : "تعذر الاتصال بالشبكة ولم يتم العثور على بيانات طلاب محفوظة لهذه الحلقة.",
+          });
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
 
     return () => controller.abort();
-  }, [halaqaId, sessionDate]);
+  }, [halaqaId, sessionDate, dashboard, selectedHalaqa]);
+
+  // Auto-save draft locally whenever student recitation data is modified
+  function handleStudentsUpdate(newStudents: SessionStudentValue[]) {
+    setStudents(newStudents);
+    if (halaqaId && sessionDate) {
+      void saveSessionDraft("teacher", halaqaId, sessionDate, newStudents);
+    }
+  }
+
+  function restoreLocalDraft() {
+    if (pendingDraft) {
+      setStudents(pendingDraft.students);
+      setPendingDraft(null);
+      setNotice({ type: "success", text: "تم استرجاع المسودة المحلية المحفوظة على جهازك بنجاح." });
+    }
+  }
+
+  function discardLocalDraft() {
+    if (pendingDraft) {
+      void removeSessionDraft("teacher", halaqaId, sessionDate);
+      setPendingDraft(null);
+      setNotice({ type: "success", text: "تم تجاهل المسودة المحلية." });
+    }
+  }
 
   const totals = useMemo(() => {
     let present = 0;
@@ -141,7 +238,8 @@ export function TeacherSessionPanel({
   }, [students]);
 
   function updateStudent(studentId: string, update: (student: SessionStudentValue) => SessionStudentValue) {
-    setStudents((current) => current.map((student) => (student.studentId === studentId ? update(student) : student)));
+    const updated = students.map((student) => (student.studentId === studentId ? update(student) : student));
+    handleStudentsUpdate(updated);
   }
 
   function setAttendance(studentId: string, attendance: SessionAttendanceCode) {
@@ -149,9 +247,9 @@ export function TeacherSessionPanel({
       ...student,
       attendance,
       activities:
-        attendance === "PRESENT"
-          ? student.activities
-          : student.activities.map((activity) => ({ ...activity, text: "", pageCount: 0 })),
+        attendance === "NOT_HEARD" || attendance === "ABSENT" || attendance === "EXCUSED"
+          ? []
+          : student.activities,
     }));
   }
 
@@ -165,7 +263,7 @@ export function TeacherSessionPanel({
   }
 
   async function saveStudents(studentIds: string[], complete: boolean) {
-    if (!editor?.allowed || !halaqaId || !sessionDate) return;
+    if (!halaqaId || !sessionDate) return;
 
     const items = students
       .filter((student) => studentIds.includes(student.studentId))
@@ -192,21 +290,59 @@ export function TeacherSessionPanel({
     setBusyKey(key);
     setNotice(null);
 
+    const payloadData = { date: sessionDate, complete, items };
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+
+    if (isOffline || isOfflineMode) {
+      await enqueueSyncItem({
+        teacherId: "teacher",
+        halaqaId,
+        sessionDate,
+        type: complete ? "save_session" : "save_student",
+        endpoint: `/api/teacher/sessions/${halaqaId}/${sessionDate}`,
+        method: "PUT",
+        payload: payloadData,
+      });
+      void getAllSyncItems().then(setOfflineSyncItems);
+      setNotice({
+        type: "success",
+        text: "تم حفظ الجلسة محلياً، وسيتم رفعها ومزامنتها تلقائياً عند عودة الإنترنت.",
+      });
+      setBusyKey(null);
+      return;
+    }
+
     try {
       const response = await fetch(`/api/teacher/sessions/${halaqaId}/${sessionDate}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: sessionDate, complete, items }),
+        body: JSON.stringify(payloadData),
       });
       const payload = await readApiPayload(response);
       if (!response.ok) throw new Error(payload.message || "تعذر حفظ الجلسة.");
       if (payload.data) {
         setEditor(payload.data);
         setStudents(payload.data.students);
+        void removeSessionDraft("teacher", halaqaId, sessionDate);
+        void saveTeacherDataCache("teacher", halaqaId, dashboard, payload.data.students, payload.data);
       }
       setNotice({ type: "success", text: payload.message || "تم حفظ البيانات بنجاح." });
-    } catch (error) {
-      setNotice({ type: "error", text: error instanceof Error ? error.message : "تعذر حفظ الجلسة." });
+    } catch {
+      // Fallback to offline queue if network fetch failed
+      await enqueueSyncItem({
+        teacherId: "teacher",
+        halaqaId,
+        sessionDate,
+        type: complete ? "save_session" : "save_student",
+        endpoint: `/api/teacher/sessions/${halaqaId}/${sessionDate}`,
+        method: "PUT",
+        payload: payloadData,
+      });
+      void getAllSyncItems().then(setOfflineSyncItems);
+      setNotice({
+        type: "success",
+        text: "تعذر الاتصال بالخادم. تم حفظ الجلسة محلياً بانتظار المزامنة عند عودة الإنترنت.",
+      });
     } finally {
       setBusyKey(null);
     }
@@ -214,15 +350,64 @@ export function TeacherSessionPanel({
 
   return (
     <div className="space-y-6" dir="rtl">
-      {/* 6 Organized Dashboard Tabs Navigation Bar */}
-      <nav className="flex overflow-x-auto rounded-3xl border border-emerald-100 bg-white p-1.5 shadow-sm scrollbar-none">
+      {/* Network Status & Offline Queue Monitoring */}
+      <NetworkStatusBar onSyncCompleted={() => void getAllSyncItems().then(setOfflineSyncItems)} />
+
+      {/* Offline Mode Last Cache Timestamp Banner (Requirement 5) */}
+      {isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine) ? (
+        <aside aria-label="شريط وضع الأوفلاين" className="rounded-2xl border border-amber-300 bg-amber-50 p-3.5 text-xs font-bold text-amber-950 shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="size-2.5 rounded-full bg-amber-500 animate-pulse" />
+            <span>
+              أنت تعمل بدون إنترنت — آخر تحديث لبيانات الطلاب كان:{" "}
+              <strong className="font-black text-amber-900">{lastCacheTime || "غير محدد"}</strong>
+            </span>
+          </div>
+          <span className="rounded-lg bg-amber-200/80 px-2.5 py-1 text-[11px] font-black text-amber-900">
+            PWA Offline Mode
+          </span>
+        </aside>
+      ) : null}
+
+      {/* Local Draft Recovery Prompt Banner */}
+      {pendingDraft ? (
+        <aside aria-label="استرجاع المسودة المحلية" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs font-bold text-amber-950 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="font-black text-amber-900 text-sm">⚠️ يوجد تسميع محفوظ محلياً لهذه الجلسة لم يتم رفعه بعد!</p>
+              <p className="mt-1 text-amber-800">
+                عُثر على مسودة تسميع مخزنة محلياً على جهازك لم ترفع بعد. هل ترغب باسترجاعها أم إهمالها؟
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={restoreLocalDraft}
+                className="rounded-xl bg-amber-900 px-4 py-2 text-xs font-black text-white shadow-xs hover:bg-amber-950"
+              >
+                📥 استرجاع المسودة
+              </button>
+              <button
+                type="button"
+                onClick={discardLocalDraft}
+                className="rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100"
+              >
+                تجاهل
+              </button>
+            </div>
+          </div>
+        </aside>
+      ) : null}
+
+      {/* 5 Dashboard Tabs Navigation Bar */}
+      <nav className="flex overflow-x-auto rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-1.5 shadow-sm scrollbar-none transition-colors duration-200">
         <button
           type="button"
           onClick={() => setActiveTab("recitation")}
           className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-5 text-xs font-black transition ${
             activeTab === "recitation"
-              ? "bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
-              : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-900"
+              ? "bg-[var(--primary)] text-white shadow-md"
+              : "text-[var(--text-muted)] hover:bg-[var(--card-soft)] hover:text-[var(--primary)]"
           }`}
         >
           <span>📖 التسميع اليومي</span>
@@ -233,8 +418,8 @@ export function TeacherSessionPanel({
           onClick={() => setActiveTab("students")}
           className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-5 text-xs font-black transition ${
             activeTab === "students"
-              ? "bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
-              : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-900"
+              ? "bg-[var(--primary)] text-white shadow-md"
+              : "text-[var(--text-muted)] hover:bg-[var(--card-soft)] hover:text-[var(--primary)]"
           }`}
         >
           <span>👥 طلاب الحلقة</span>
@@ -245,8 +430,8 @@ export function TeacherSessionPanel({
           onClick={() => setActiveTab("history")}
           className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-5 text-xs font-black transition ${
             activeTab === "history"
-              ? "bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
-              : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-900"
+              ? "bg-[var(--primary)] text-white shadow-md"
+              : "text-[var(--text-muted)] hover:bg-[var(--card-soft)] hover:text-[var(--primary)]"
           }`}
         >
           <span>📜 الجلسات المسجلة ({dashboard.recentSessions.length})</span>
@@ -257,8 +442,8 @@ export function TeacherSessionPanel({
           onClick={() => setActiveTab("parent_report")}
           className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-5 text-xs font-black transition ${
             activeTab === "parent_report"
-              ? "bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
-              : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-900"
+              ? "bg-[var(--primary)] text-white shadow-md"
+              : "text-[var(--text-muted)] hover:bg-[var(--card-soft)] hover:text-[var(--primary)]"
           }`}
         >
           <span>📄 تقرير ولي الأمر</span>
@@ -269,8 +454,8 @@ export function TeacherSessionPanel({
           onClick={() => setActiveTab("monthly_report")}
           className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-5 text-xs font-black transition ${
             activeTab === "monthly_report"
-              ? "bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
-              : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-900"
+              ? "bg-[var(--primary)] text-white shadow-md"
+              : "text-[var(--text-muted)] hover:bg-[var(--card-soft)] hover:text-[var(--primary)]"
           }`}
         >
           <span>📊 التقرير الشهري</span>
@@ -281,8 +466,8 @@ export function TeacherSessionPanel({
         <div
           className={`rounded-2xl border p-4 text-xs font-black ${
             notice.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-              : "border-red-200 bg-red-50 text-red-800"
+              ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
+              : "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]"
           }`}
         >
           {notice.text}
@@ -292,8 +477,14 @@ export function TeacherSessionPanel({
       {/* Tab 1: Daily Recitation Tab */}
       {activeTab === "recitation" ? (
         <div className="space-y-6">
+          {/* Pending Sessions Queue Component (Requirement 6 & 7) */}
+          <PendingSessionsList
+            items={offlineSyncItems}
+            onRefresh={() => void getAllSyncItems().then(setOfflineSyncItems)}
+          />
+
           {/* Controls Bar: Single Halaqa Display or Dropdown */}
-          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="form-label" htmlFor="session-halaqa">الحلقة الدراسية</label>
@@ -311,7 +502,7 @@ export function TeacherSessionPanel({
                     ))}
                   </select>
                 ) : (
-                  <div className="form-control flex items-center bg-emerald-50/60 font-black text-emerald-950 border-emerald-200">
+                  <div className="form-control flex items-center bg-[var(--card-soft)] font-black text-[var(--primary)] border-[var(--border-color)]">
                     🕌 {selectedHalaqa?.nameAr} ({selectedHalaqa?.stageName})
                   </div>
                 )}
@@ -333,30 +524,30 @@ export function TeacherSessionPanel({
 
           {/* Recitation Main Content */}
           {loading ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center text-slate-500 shadow-sm">
-              <div className="mx-auto size-8 animate-spin rounded-full border-4 border-emerald-700 border-t-transparent" />
+            <div className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-12 text-center text-[var(--text-muted)] shadow-sm">
+              <div className="mx-auto size-8 animate-spin rounded-full border-4 border-[var(--primary)] border-t-transparent" />
               <p className="mt-4 text-sm font-bold">جاري تحميل طلاب الحلقة والجلسة...</p>
             </div>
-          ) : editor?.allowed ? (
+          ) : editor?.allowed || isOfflineMode ? (
             <div className="space-y-4">
               {/* Quick Stats Bar */}
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                <StatCard label="الطلاب" value={students.length} color="bg-slate-50 text-slate-900" />
-                <StatCard label="حاضر" value={totals.present} color="bg-emerald-50 text-emerald-900" />
-                <StatCard label="غائب" value={totals.absent} color="bg-red-50 text-red-900" />
-                <StatCard label="عذر" value={totals.excused} color="bg-blue-50 text-blue-900" />
-                <StatCard label="لم يسمع" value={totals.notHeard} color="bg-amber-50 text-amber-900" />
-                <StatCard label="صفحات" value={totals.pages} color="bg-purple-50 text-purple-900" />
+                <StatCard label="الطلاب" value={students.length} color="bg-[var(--card-soft)] text-[var(--text-main)] border border-[var(--border-color)]" />
+                <StatCard label="حاضر" value={totals.present} color="bg-[var(--status-success-bg)] text-[var(--status-success-text)] border border-[var(--status-success-border)]" />
+                <StatCard label="غائب" value={totals.absent} color="bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border border-[var(--status-danger-border)]" />
+                <StatCard label="عذر" value={totals.excused} color="bg-[var(--status-info-bg)] text-[var(--status-info-text)] border border-[var(--status-info-border)]" />
+                <StatCard label="لم يسمع" value={totals.notHeard} color="bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] border border-[var(--status-warning-border)]" />
+                <StatCard label="صفحات" value={totals.pages} color="bg-[var(--card-soft)] text-[var(--gold)] border border-[var(--border-color)]" />
               </div>
 
-              {/* Collapsible Student Recitation Cards (Mobile First Accordion) */}
+              {/* Collapsible Student Recitation Cards */}
               <div className="space-y-3">
                 {students.map((student) => {
                   const isExpanded = expandedStudentId === student.studentId;
                   return (
                     <article
                       key={student.studentId}
-                      className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-emerald-200"
+                      className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm transition hover:border-[var(--primary)] text-[var(--text-main)]"
                     >
                       {/* Card Collapsible Header */}
                       <div
@@ -483,7 +674,7 @@ export function TeacherSessionPanel({
                             <button
                               type="button"
                               disabled={busyKey === `student-${student.studentId}`}
-                              onClick={() => saveStudents([student.studentId], false)}
+                              onClick={() => void saveStudents([student.studentId], false)}
                               className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white hover:bg-black disabled:opacity-50"
                             >
                               {busyKey === `student-${student.studentId}` ? "جاري الحفظ..." : "حفظ بيانات هذا الطالب فقط"}
@@ -504,7 +695,7 @@ export function TeacherSessionPanel({
                 <button
                   type="button"
                   disabled={busyKey === "complete-session"}
-                  onClick={() => saveStudents(students.map((s) => s.studentId), true)}
+                  onClick={() => void saveStudents(students.map((s) => s.studentId), true)}
                   className="min-h-12 rounded-2xl bg-emerald-900 px-6 text-sm font-black text-white shadow-lg transition hover:bg-emerald-950 disabled:opacity-50"
                 >
                   {busyKey === "complete-session" ? "جاري اعتماد الجلسة..." : "✅ اعتماد الجلسة بالكامل"}
@@ -529,8 +720,8 @@ export function TeacherSessionPanel({
             displayName: s.displayName,
             parentPhone: null,
             gradeLevel: null,
-            halaqaName: selectedHalaqa.nameAr,
-            stageName: selectedHalaqa.stageName,
+            halaqaName: selectedHalaqa?.nameAr || "الحلقة",
+            stageName: selectedHalaqa?.stageName || "",
             memorizationStartedOn: null,
           }))}
           onRefresh={() => window.location.reload()}
@@ -539,9 +730,16 @@ export function TeacherSessionPanel({
 
       {/* Tab 3: Saved History Sessions Tab */}
       {activeTab === "history" ? (
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-          <h2 className="text-lg font-black text-slate-950">سجل الجلسات التسميعية الأخيرة</h2>
-          <div className="divide-y divide-slate-100">
+        <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-5 shadow-sm space-y-4 text-[var(--text-main)] transition-colors duration-200">
+          <h2 className="text-lg font-black text-[var(--text-main)]">سجل الجلسات التسميعية الأخيرة</h2>
+
+          {/* Pending Offline Sessions Queue Section (Requirement 7) */}
+          <PendingSessionsList
+            items={offlineSyncItems}
+            onRefresh={() => void getAllSyncItems().then(setOfflineSyncItems)}
+          />
+
+          <div className="divide-y divide-[var(--border-color)]">
             {dashboard.recentSessions.map((session) => (
               <div
                 key={session.id}
@@ -550,7 +748,7 @@ export function TeacherSessionPanel({
                     sessionId: session.id,
                     halaqaId: session.halaqaId,
                     halaqaName: session.halaqaName,
-                    stageName: selectedHalaqa.stageName,
+                    stageName: selectedHalaqa?.stageName || "",
                     teacherName: "",
                     sessionDate: session.sessionDate,
                     weekdayLabel: session.sessionDate,
@@ -569,13 +767,13 @@ export function TeacherSessionPanel({
                     })),
                   })
                 }
-                className="flex cursor-pointer items-center justify-between py-3 hover:bg-slate-50 rounded-xl px-3 transition"
+                className="flex cursor-pointer items-center justify-between py-3 hover:bg-[var(--card-soft)] rounded-xl px-3 transition"
               >
                 <div>
-                  <span className="text-xs font-black text-emerald-900">جلسة تاريخ: {session.sessionDate}</span>
-                  <p className="text-sm font-bold text-slate-800">{session.halaqaName} ({session.recordedStudents}/{session.totalStudents} طالب)</p>
+                  <span className="text-xs font-black text-[var(--primary)]">جلسة تاريخ: {session.sessionDate}</span>
+                  <p className="text-sm font-bold text-[var(--text-main)]">{session.halaqaName} ({session.recordedStudents}/{session.totalStudents} طالب)</p>
                 </div>
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-900">
+                <span className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1 text-xs font-black text-[var(--primary)]">
                   استعراض وتعديل الجلسة 🔍
                 </span>
               </div>
@@ -586,20 +784,40 @@ export function TeacherSessionPanel({
 
       {/* Tab 4: Parent Report Selector Tab */}
       {activeTab === "parent_report" ? (
-        <ParentReportSelector students={students.map((s) => ({ id: s.studentId, displayName: s.displayName }))} />
+        isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine) ? (
+          <aside className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-center text-xs font-bold text-amber-950 space-y-2">
+            <span className="text-3xl block">📄</span>
+            <h3 className="text-sm font-black text-amber-900">تقرير ولي الأمر يحتاج إلى اتّصال بالإنترنت</h3>
+            <p className="text-amber-800">
+              استخراج وتوليد تقرير ولي الأمر يتطلب التواصل المباشر مع السيرفر. المتاح حالياً بدون نت هو شاشة التسميع اليومية.
+            </p>
+          </aside>
+        ) : (
+          <ParentReportSelector students={students.map((s) => ({ id: s.studentId, displayName: s.displayName }))} />
+        )
       ) : null}
 
       {/* Tab 5: Monthly Reports Tab */}
       {activeTab === "monthly_report" ? (
-        <MonthlyReportsPanel
-          options={{
-            roleCode: "TEACHER",
-            defaultKind: "COMPREHENSIVE",
-            allowedKinds: ["COMPREHENSIVE"],
-            stages: [],
-          }}
-          initialMonth={initialDate.slice(0, 7)}
-        />
+        isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine) ? (
+          <aside className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-center text-xs font-bold text-amber-950 space-y-2">
+            <span className="text-3xl block">📊</span>
+            <h3 className="text-sm font-black text-amber-900">التقرير الشهري يحتاج إلى اتّصال بالإنترنت</h3>
+            <p className="text-amber-800">
+              استخراج وتوليد التقارير الشهيرة ورسوم البيانات يتطلب الاتصال بالسيرفر. المتاح حالياً بدون نت هو شاشة التسميع اليومية.
+            </p>
+          </aside>
+        ) : (
+          <MonthlyReportsPanel
+            options={{
+              roleCode: "TEACHER",
+              defaultKind: "COMPREHENSIVE",
+              allowedKinds: ["COMPREHENSIVE"],
+              stages: [],
+            }}
+            initialMonth={initialDate.slice(0, 7)}
+          />
+        )
       ) : null}
 
       {/* Modal for History Detail Inspection & Editing */}
@@ -681,7 +899,7 @@ function ActivityQuranSelector({
         <button
           type="button"
           onClick={handleFullSurah}
-          className="rounded-xl bg-white px-2.5 py-1 text-[11px] font-black text-slate-800 border border-slate-200 hover:bg-slate-50"
+          className="rounded-xl bg-[var(--card-bg)] px-2.5 py-1 text-[11px] font-black text-[var(--text-main)] border border-[var(--border-color)] hover:bg-[var(--card-soft)] transition"
         >
           🎯 السورة كاملة
         </button>
@@ -690,7 +908,7 @@ function ActivityQuranSelector({
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         {/* Surah Dropdown */}
         <div>
-          <label className="text-[11px] font-bold text-slate-600 block mb-1">اختر السورة:</label>
+          <label className="text-[11px] font-bold text-[var(--text-muted)] block mb-1">اختر السورة:</label>
           <select
             value={selectedSurahNumber}
             onChange={(e) => handleSurahChange(Number(e.target.value))}
@@ -706,7 +924,7 @@ function ActivityQuranSelector({
 
         {/* From Ayah */}
         <div>
-          <label className="text-[11px] font-bold text-slate-600 block mb-1">من آية:</label>
+          <label className="text-[11px] font-bold text-[var(--text-muted)] block mb-1">من آية:</label>
           <input
             type="number"
             min={1}
@@ -719,7 +937,7 @@ function ActivityQuranSelector({
 
         {/* To Ayah */}
         <div>
-          <label className="text-[11px] font-bold text-slate-600 block mb-1">إلى آية:</label>
+          <label className="text-[11px] font-bold text-[var(--text-muted)] block mb-1">إلى آية:</label>
           <input
             type="number"
             min={1}
@@ -731,9 +949,9 @@ function ActivityQuranSelector({
         </div>
       </div>
 
-      <div className="flex items-center justify-between text-xs font-bold pt-1 text-slate-700">
+      <div className="flex items-center justify-between text-xs font-bold pt-1 text-[var(--text-main)]">
         <span>النص المحسوب: {activity.text || `سورة ${selectedSurah.nameAr}`}</span>
-        <span className="rounded-md bg-white px-2 py-0.5 font-black border text-slate-900">
+        <span className="rounded-md bg-[var(--card-bg)] px-2 py-0.5 font-black border border-[var(--border-color)] text-[var(--text-main)]">
           الصفحات: {activity.pageCount} ص
         </span>
       </div>

@@ -1,0 +1,25 @@
+{
+  "name": "مركز سيد الشهداء حمزة - نظام إدارة التحفيظ",
+  "short_name": "تحفيظ حمزة",
+  "description": "تطبيق إدارة الحلقات والتسميع والتقارير لمركز سيد الشهداء حمزة لتلاوة القرآن وتحفيظه",
+  "start_url": "/teacher",
+  "display": "standalone",
+  "background_color": "#07583a",
+  "theme_color": "#07583a",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

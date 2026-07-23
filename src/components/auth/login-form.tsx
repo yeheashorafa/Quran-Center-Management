@@ -8,6 +8,14 @@ import { ChevronDown, Eye, EyeOff } from "lucide-react";
 import { loginRoles } from "@/config/app";
 import { loginSchema, type LoginInput } from "@/lib/auth/schemas";
 import type { LoginOptionsResponse } from "@/lib/auth/types";
+import {
+  getOfflineExaminerProfile,
+  getOfflineTeacherProfile,
+  saveOfflineExaminerProfile,
+  saveOfflineTeacherProfile,
+  type OfflineExaminerProfile,
+  type OfflineTeacherProfile,
+} from "@/lib/offline/offline-profile";
 
 function LockIcon() {
   return (
@@ -53,6 +61,9 @@ export function LoginForm() {
   const [serverError, setServerError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  const [teacherProfile, setTeacherProfile] = useState<OfflineTeacherProfile | null>(null);
+  const [examinerProfile, setExaminerProfile] = useState<OfflineExaminerProfile | null>(null);
+
   const {
     register,
     handleSubmit,
@@ -72,6 +83,11 @@ export function LoginForm() {
 
   const role = useWatch({ control, name: "role" });
   const stageId = useWatch({ control, name: "stageId" });
+
+  useEffect(() => {
+    void getOfflineTeacherProfile().then(setTeacherProfile);
+    void getOfflineExaminerProfile().then(setExaminerProfile);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -158,17 +174,62 @@ export function LoginForm() {
       return;
     }
 
+    // Save non-sensitive offline profile based on role (NO PASSWORDS OR TOKENS)
+    if (input.role === "TEACHER" && input.userId) {
+      const teacherUser = options.users.find((u) => u.id === input.userId);
+      await saveOfflineTeacherProfile({
+        teacherId: input.userId,
+        halaqaId: "",
+        teacherName: teacherUser?.displayName || "الشيخ",
+        halaqaName: "",
+      });
+    } else if (input.role === "EXAMINER" && input.userId) {
+      const examinerUser = options.users.find((u) => u.id === input.userId);
+      await saveOfflineExaminerProfile({
+        examinerId: input.userId,
+        examinerName: examinerUser?.displayName || "المختبر",
+      });
+    }
+
     router.replace(payload.redirectTo);
     router.refresh();
   }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
-      <fieldset disabled={isSubmitting}>
-        {/* <legend className="mb-2 text-xs font-black text-slate-800">
-          اختر دورك في المركز:
-        </legend> */}
+      {/* Offline Shortcuts Banner for Teacher & Examiner */}
+      {teacherProfile || examinerProfile ? (
+        <aside aria-label="اختصارات العمل أوفلاين" className="rounded-2xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] p-4 text-xs font-bold text-[var(--status-success-text)] shadow-xs">
+          <div className="flex flex-col gap-2">
+            <p className="font-black text-sm text-[var(--status-success-text)]">
+              🟢 الجلسات الآمنة المحفوظة محلياً على هذا الجهاز:
+            </p>
+            <div className="flex flex-col gap-2 pt-1">
+              {teacherProfile ? (
+                <button
+                  type="button"
+                  onClick={() => router.push("/teacher")}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-xs font-black text-white shadow-xs hover:opacity-90 transition"
+                >
+                  📖 الدخول إلى وضع الشيخ ({teacherProfile.teacherName} — التسميع Offline)
+                </button>
+              ) : null}
 
+              {examinerProfile ? (
+                <button
+                  type="button"
+                  onClick={() => router.push("/examiner")}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-[var(--primary-dark)] px-4 py-2.5 text-xs font-black text-white shadow-xs hover:opacity-90 transition"
+                >
+                  📝 الدخول إلى وضع المختبر ({examinerProfile.examinerName} — الاختبارات Offline)
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </aside>
+      ) : null}
+
+      <fieldset disabled={isSubmitting}>
         <div className="grid grid-cols-3 gap-2">
           {loginRoles.map((item) => {
             const active = item.value === role;
@@ -186,8 +247,8 @@ export function LoginForm() {
                 }}
                 className={`flex flex-col items-center justify-center rounded-2xl border p-3 text-center transition-all ${
                   active
-                    ? "border-emerald-700 bg-emerald-900 text-white shadow-md shadow-emerald-950/20"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50/50"
+                    ? "border-[var(--primary)] bg-[var(--primary)] text-white shadow-md"
+                    : "border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:border-[var(--primary)]"
                 }`}
               >
                 <span className="mb-1 text-xl">
@@ -205,16 +266,6 @@ export function LoginForm() {
         </div>
       </fieldset>
 
-      {/* {role === "CENTER_MANAGER" ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-xs font-bold text-emerald-950">
-          👑 دخول مدير المركز الإداري — أدخل كلمة المرور الخاصة بالإدارة.
-        </div>
-      ) : role === "EXAMINER" ? (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-3.5 text-xs font-bold text-blue-950">
-          📝 دخول المختبر الرسمي للمركز — أدخل كلمة المرور الخاصة بالممتحن.
-        </div>
-      ) : null} */}
-
       {role === "TEACHER" ? (
         <div className="space-y-4">
           <div>
@@ -225,7 +276,7 @@ export function LoginForm() {
             <div className="relative">
               <select
                 id="stageId"
-                className="form-control appearance-none pr-4 pl-12 font-bold text-xs"
+                className="font-bold text-xs"
                 disabled={optionsLoading || isSubmitting}
                 {...register("stageId", {
                   onChange: () => {
@@ -242,10 +293,6 @@ export function LoginForm() {
                   </option>
                 ))}
               </select>
-
-              <span className="pointer-events-none absolute inset-y-0 left-0 flex w-12 items-center justify-center text-emerald-800">
-                <ChevronDown className="size-5" />
-              </span>
             </div>
           </div>
 
@@ -254,15 +301,15 @@ export function LoginForm() {
               إسم المحفّظ
             </label>
 
-            <div className="flex h-12 w-full items-center overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 transition focus-within:border-emerald-700 focus-within:ring-4 focus-within:ring-emerald-100">
-              <span className="flex h-full w-12 shrink-0 items-center justify-center text-slate-400">
+            <div className="relative flex h-12 w-full items-center overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--input-bg)] text-[var(--text-main)] transition focus-within:border-[var(--primary)] focus-within:ring-4 focus-within:ring-[var(--primary-light)]">
+              <span className="flex h-full w-10 shrink-0 items-center justify-center text-[var(--text-muted)]">
                 <UserIcon />
               </span>
 
               <select
                 id="userId"
                 dir="rtl"
-                className="h-full min-w-0 flex-1 appearance-none bg-transparent px-1 text-right text-xs font-bold outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                className="nested-select h-full min-w-0 flex-1 bg-transparent px-2 text-right text-xs font-bold text-[var(--text-main)] outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={optionsLoading || isSubmitting}
                 {...register("userId")}
               >
@@ -277,13 +324,13 @@ export function LoginForm() {
                 ))}
               </select>
 
-              <span className="flex h-full w-12 shrink-0 items-center justify-center text-emerald-800">
-                <ChevronDown className="size-5" />
+              <span className="pointer-events-none flex h-full w-10 shrink-0 items-center justify-center text-[var(--primary)]">
+                <ChevronDown className="size-4" />
               </span>
             </div>
 
             {errors.userId ? (
-              <p className="mt-1.5 text-xs font-bold text-red-700">
+              <p className="mt-1.5 text-xs font-bold text-[var(--status-danger-text)]">
                 {errors.userId.message}
               </p>
             ) : null}
@@ -296,8 +343,8 @@ export function LoginForm() {
           كلمة المرور
         </label>
 
-        <div className="flex h-12 w-full items-center overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 transition focus-within:border-emerald-700 focus-within:ring-4 focus-within:ring-emerald-100">
-          <span className="flex h-full w-12 shrink-0 items-center justify-center text-slate-400">
+        <div className="flex h-12 w-full items-center overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--input-bg)] text-[var(--text-main)] transition focus-within:border-[var(--primary)] focus-within:ring-4 focus-within:ring-[var(--primary-light)]">
+          <span className="flex h-full w-12 shrink-0 items-center justify-center text-[var(--text-muted)]">
             <LockIcon />
           </span>
 
@@ -307,7 +354,7 @@ export function LoginForm() {
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
             disabled={isSubmitting}
-            className="h-full min-w-0 flex-1 bg-transparent px-1 text-right font-bold tracking-wide outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+            className="h-full min-w-0 flex-1 bg-transparent px-1 text-right font-bold tracking-wide text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)] disabled:cursor-not-allowed disabled:opacity-50"
             placeholder="أدخل كلمة المرور"
             {...register("password")}
           />
@@ -316,7 +363,7 @@ export function LoginForm() {
             type="button"
             onClick={() => setShowPassword((current) => !current)}
             disabled={isSubmitting}
-            className="flex h-full w-12 shrink-0 items-center justify-center text-slate-400 transition hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-full w-12 shrink-0 items-center justify-center text-[var(--text-muted)] transition hover:text-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={
               showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"
             }
@@ -330,17 +377,17 @@ export function LoginForm() {
         </div>
 
         {errors.password ? (
-          <p className="mt-1.5 text-xs font-bold text-red-700">
+          <p className="mt-1.5 text-xs font-bold text-[var(--status-danger-text)]">
             {errors.password.message}
           </p>
         ) : null}
       </div>
 
-      <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 text-xs font-bold text-slate-700">
+      <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-[var(--border-color)] bg-[var(--card-soft)] p-3 text-xs font-bold text-[var(--text-main)]">
         <input
           type="checkbox"
           disabled={isSubmitting}
-          className="size-4 rounded-md accent-emerald-900"
+          className="size-4 rounded-md accent-[var(--primary)]"
           {...register("rememberDevice")}
         />
 
@@ -350,7 +397,7 @@ export function LoginForm() {
       {optionsError ? (
         <div
           role="alert"
-          className="rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-extrabold text-red-800"
+          className="rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-3 text-xs font-extrabold text-[var(--status-danger-text)]"
         >
           ⚠️ {optionsError}
         </div>
@@ -359,7 +406,7 @@ export function LoginForm() {
       {serverError ? (
         <div
           role="alert"
-          className="rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-extrabold text-red-800"
+          className="rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-3 text-xs font-extrabold text-[var(--status-danger-text)]"
         >
           ⚠️ {serverError}
         </div>
@@ -368,7 +415,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={isSubmitting || optionsLoading || Boolean(optionsError)}
-        className="flex min-h-12 w-full items-center justify-center rounded-2xl bg-emerald-900 px-5 py-3 text-sm font-black text-white shadow-lg shadow-emerald-950/15 transition hover:bg-emerald-950 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex min-h-12 w-full items-center justify-center rounded-2xl bg-[var(--primary)] px-5 py-3 text-sm font-black text-white shadow-lg transition hover:bg-[var(--primary-dark)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--primary-light)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isSubmitting ? (
           <span className="flex items-center gap-2">

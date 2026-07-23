@@ -81,6 +81,11 @@ export function MonthlyReportsPanel({
   }
 
   async function download(format: ReportFormat) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setNotice({ type: "error", text: "التقارير والتصدير تحتاج اتصالاً بالإنترنت." });
+      return;
+    }
+
     if (!month) {
       setNotice({ type: "error", text: "اختر الشهر أولاً." });
       return;
@@ -128,14 +133,14 @@ export function MonthlyReportsPanel({
   }
 
   return (
-    <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
+    <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200" dir="rtl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-bold text-emerald-700">{content.eyebrow}</p>
-          <h2 className="mt-1 text-xl font-black text-slate-950">{content.title}</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{content.description}</p>
+          <p className="text-xs font-bold text-[var(--gold)]">{content.eyebrow}</p>
+          <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">{content.title}</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">{content.description}</p>
         </div>
-        <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
+        <div className="rounded-2xl bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-2 text-xs font-bold text-[var(--primary)]">
           Excel + PDF
         </div>
       </div>
@@ -144,8 +149,8 @@ export function MonthlyReportsPanel({
         <div
           className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
             notice.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-              : "border-red-200 bg-red-50 text-red-800"
+              ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
+              : "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]"
           }`}
         >
           {notice.text}
@@ -213,7 +218,7 @@ export function MonthlyReportsPanel({
       </div>
 
       {kind === "EXAMS" && options.roleCode !== "TEACHER" ? (
-        <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">
+        <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm font-bold text-[var(--text-main)]">
           <input
             type="checkbox"
             checked={includeVoided}
@@ -226,7 +231,7 @@ export function MonthlyReportsPanel({
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <button
           type="button"
-          className="rounded-2xl bg-emerald-800 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-black text-white transition hover:bg-[var(--primary-dark)] disabled:cursor-not-allowed disabled:opacity-60"
           disabled={busy !== null}
           onClick={() => download("excel")}
         >
@@ -234,7 +239,7 @@ export function MonthlyReportsPanel({
         </button>
         <button
           type="button"
-          className="rounded-2xl border-2 border-emerald-800 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-950 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-2xl border-2 border-[var(--primary)] bg-[var(--card-soft)] px-4 py-3 text-sm font-black text-[var(--primary)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={busy !== null}
           onClick={() => download("csv")}
         >
@@ -242,7 +247,7 @@ export function MonthlyReportsPanel({
         </button>
         <button
           type="button"
-          className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)] px-4 py-3 text-sm font-black text-[var(--text-main)] transition hover:border-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
           disabled={busy !== null}
           onClick={() => download("pdf")}
         >
@@ -250,7 +255,7 @@ export function MonthlyReportsPanel({
         </button>
       </div>
 
-      <p className="mt-3 text-xs leading-6 text-slate-500">
+      <p className="mt-3 text-xs leading-6 text-[var(--text-muted)]">
         ملف Excel يُنشأ بصيغة Spreadsheet XML المتوافقة مع Microsoft Excel، وملف PDF يُنشأ على الخادم من قالب عربي جاهز للطباعة.
       </p>
     </section>

@@ -1,11 +1,15 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type {
   OfficialExamListItem,
   OfficialExamOptionsData,
   OfficialExamType,
 } from "@/lib/official-exams/types";
+import { NetworkStatusBar } from "@/components/offline/network-status-bar";
+import { saveOfflineExaminerProfile } from "@/lib/offline/offline-profile";
+import { getExaminerDataCache, saveExaminerDataCache } from "@/lib/offline/examiner-cache";
+import { enqueueSyncItem, getAllSyncItems, processSyncQueue, type SyncQueueItem } from "@/lib/offline/sync-queue";
 
 type Notice = { type: "success" | "error"; text: string } | null;
 type ExamFormState = {
@@ -48,15 +52,22 @@ function examTypeLabel(value: OfficialExamType): string {
 }
 
 function resultStyle(label: string | null): string {
-  if (!label) return "bg-slate-100 text-slate-700";
-  if (label === "امتياز") return "bg-emerald-100 text-emerald-900";
-  if (label === "ممتاز") return "bg-sky-100 text-sky-900";
-  if (label === "جيد جداً") return "bg-amber-100 text-amber-900";
-  return "bg-red-100 text-red-800";
+  if (!label) return "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-muted)]";
+  if (label === "امتياز") return "border border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]";
+  if (label === "ممتاز") return "border border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--status-info-text)]";
+  if (label === "جيد جداً") return "border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]";
+  return "border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]";
+}
+
+function calculateResultLabel(score: number): string {
+  if (score >= 95) return "امتياز";
+  if (score >= 85) return "ممتاز";
+  if (score >= 75) return "جيد جداً";
+  return "ضعيف / أعيد";
 }
 
 export function ExaminerExamsPanel({
-  options,
+  options: initialOptions,
   initialExams,
   initialDate,
 }: {
@@ -64,6 +75,7 @@ export function ExaminerExamsPanel({
   initialExams: OfficialExamListItem[];
   initialDate: string;
 }) {
+  const [options, setOptions] = useState<OfficialExamOptionsData>(initialOptions);
   const firstStage = options.stages[0];
   const firstHalaqa = firstStage?.halaqat[0];
   const firstStudent = firstHalaqa?.students[0];
@@ -92,6 +104,54 @@ export function ExaminerExamsPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [createKey, setCreateKey] = useState(operationKey);
   const [editing, setEditing] = useState<OfficialExamListItem | null>(null);
+
+  // Offline examiner status
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [lastCacheTime, setLastCacheTime] = useState<string | null>(null);
+  const [pendingSyncItems, setPendingSyncItems] = useState<SyncQueueItem[]>([]);
+
+  const refreshPendingExams = useCallback(async () => {
+    const all = await getAllSyncItems();
+    const examItems = all.filter((i) => i.type === "save_official_exam");
+    setPendingSyncItems(examItems);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function initOfflineState() {
+      const all = await getAllSyncItems();
+      const examItems = all.filter((i) => i.type === "save_official_exam");
+      if (active) setPendingSyncItems(examItems);
+
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        await saveExaminerDataCache("examiner", initialOptions, initialExams);
+        await saveOfflineExaminerProfile({
+          examinerId: "examiner",
+          examinerName: "المختبر",
+          cachedAt: Date.now(),
+          lastOnlineLoginAt: Date.now(),
+        });
+        const nowStr = new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }) + " - " + new Date().toLocaleDateString("ar-EG");
+        if (active) setLastCacheTime(nowStr);
+      } else {
+        if (active) setIsOfflineMode(true);
+        const cache = await getExaminerDataCache("examiner");
+        if (cache && active) {
+          setOptions(cache.options);
+          if (cache.exams.length > 0) setExams(cache.exams);
+          const cacheDateStr = new Date(cache.cachedAt).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }) + " - " + new Date(cache.cachedAt).toLocaleDateString("ar-EG");
+          setLastCacheTime(cacheDateStr);
+        }
+      }
+    }
+
+    void initOfflineState();
+
+    return () => {
+      active = false;
+    };
+  }, [initialOptions, initialExams]);
 
   const selectedStage = useMemo(
     () => options.stages.find((stage) => stage.id === form.stageId) ?? null,
@@ -142,6 +202,17 @@ export function ExaminerExamsPanel({
   async function loadExams(nextFilters: FilterState = filters, preserveNotice = false) {
     setBusy("load");
     if (!preserveNotice) setNotice(null);
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const cache = await getExaminerDataCache("examiner");
+      if (cache) {
+        setExams(cache.exams);
+        setIsOfflineMode(true);
+      }
+      setBusy(null);
+      return;
+    }
+
     try {
       const query = new URLSearchParams();
       for (const [key, value] of Object.entries(nextFilters)) {
@@ -156,9 +227,15 @@ export function ExaminerExamsPanel({
         data?: OfficialExamListItem[];
       };
       if (!response.ok) throw new Error(payload.message || "تعذر تحميل الاختبارات.");
-      setExams(payload.data ?? []);
+      const list = payload.data ?? [];
+      setExams(list);
+      setIsOfflineMode(false);
+      void saveExaminerDataCache("examiner", options, list);
     } catch (error) {
-      showNotice("error", error instanceof Error ? error.message : "تعذر تحميل الاختبارات.");
+      const cache = await getExaminerDataCache("examiner");
+      if (cache) setExams(cache.exams);
+      setIsOfflineMode(true);
+      showNotice("error", error instanceof Error ? error.message : "تعذر تحميل الاختبارات (تم استخدام البيانات المحفوظة).");
     } finally {
       setBusy(null);
     }
@@ -169,20 +246,88 @@ export function ExaminerExamsPanel({
     setBusy("create");
     setNotice(null);
 
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+
+    const juzFromNum = Number(form.juzFrom);
+    const juzToNum = Number(form.examType === "INDIVIDUAL" ? form.juzFrom : form.juzTo);
+    const scoreNum = Number(form.score);
+    const student = formStudents.find((s) => s.id === form.studentId);
+    const uniqueId = operationKey();
+
+    const payloadData = {
+      studentId: form.studentId,
+      examDate: form.examDate,
+      examType: form.examType,
+      juzFrom: juzFromNum,
+      juzTo: juzToNum,
+      score: scoreNum,
+      notes: form.notes,
+      idempotencyKey: createKey,
+      studentName: student?.displayName || "طالب",
+      halaqaName: selectedHalaqa?.nameAr || "الحلقة",
+    };
+
+    if (isOffline || isOfflineMode) {
+      await enqueueSyncItem({
+        examinerId: "examiner",
+        type: "save_official_exam",
+        endpoint: "/api/examiner/exams",
+        method: "POST",
+        payload: payloadData,
+      });
+
+      const nowIso = new Date().toISOString();
+      const tempExam: OfficialExamListItem = {
+        id: `offline-${uniqueId}`,
+        student: { id: form.studentId, displayName: student?.displayName || "طالب" },
+        examDate: form.examDate,
+        examType: form.examType,
+        score: scoreNum,
+        resultLabel: calculateResultLabel(scoreNum),
+        status: "ACTIVE",
+        version: 1,
+        notes: form.notes ? `[محفوظ أوفلاين] ${form.notes}` : "[محفوظ أوفلاين]",
+        voidReason: null,
+        voidedAt: null,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        examiner: { id: "examiner", displayName: "المختبر" },
+        enrollment: {
+          id: `enrollment-${form.halaqaId}`,
+          halaqaId: form.halaqaId,
+          halaqaName: selectedHalaqa?.nameAr || "الحلقة",
+          stageId: form.stageId,
+          stageName: selectedStage?.nameAr || "المرحلة",
+        },
+        scopes: [{
+          id: `scope-${uniqueId}`,
+          type: "JUZ",
+          juzFrom: juzFromNum,
+          juzTo: juzToNum,
+          surahName: null,
+          ayahFrom: null,
+          ayahTo: null,
+          pageFrom: null,
+          pageTo: null,
+          customText: null,
+          label: form.examType === "INDIVIDUAL" ? `الجزء ${juzFromNum}` : `من الجزء ${juzFromNum} إلى ${juzToNum}`,
+        }],
+      };
+
+      setExams((current) => [tempExam, ...current]);
+      setCreateKey(operationKey());
+      setForm((current) => ({ ...current, score: "", notes: "" }));
+      await refreshPendingExams();
+      showNotice("success", "تم حفظ الاختبار محلياً بانتظار المزامنة عند عودة الإنترنت.");
+      setBusy(null);
+      return;
+    }
+
     try {
       const response = await fetch("/api/examiner/exams", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: form.studentId,
-          examDate: form.examDate,
-          examType: form.examType,
-          juzFrom: Number(form.juzFrom),
-          juzTo: Number(form.examType === "INDIVIDUAL" ? form.juzFrom : form.juzTo),
-          score: Number(form.score),
-          notes: form.notes,
-          idempotencyKey: createKey,
-        }),
+        body: JSON.stringify(payloadData),
       });
       const message = await apiMessage(response);
       if (!response.ok) throw new Error(message);
@@ -192,7 +337,16 @@ export function ExaminerExamsPanel({
       showNotice("success", message);
       await loadExams(filters, true);
     } catch (error) {
-      showNotice("error", error instanceof Error ? error.message : "تعذر حفظ الاختبار.");
+      console.warn("Exam create network error fallback to queue:", error);
+      await enqueueSyncItem({
+        examinerId: "examiner",
+        type: "save_official_exam",
+        endpoint: "/api/examiner/exams",
+        method: "POST",
+        payload: payloadData,
+      });
+      await refreshPendingExams();
+      showNotice("success", "تعذر الاتصال بالخادم. تم حفظ الاختبار محلياً بانتظار المزامنة عند عودة الإنترنت.");
     } finally {
       setBusy(null);
     }
@@ -297,34 +451,58 @@ export function ExaminerExamsPanel({
   const formSubmit = editing ? updateExam : createExam;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" dir="rtl">
+      {/* Network Status Bar */}
+      <NetworkStatusBar onSyncCompleted={() => void refreshPendingExams()} />
+
+      {/* Offline Mode Banner for Examiner */}
+      {isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine) ? (
+        <aside aria-label="شريط وضع الأوفلاين للمختبر" className="rounded-2xl border border-[var(--status-info-border)] bg-[var(--status-info-bg)] p-3.5 text-xs font-bold text-[var(--status-info-text)] shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="size-2.5 rounded-full bg-[var(--primary)] animate-pulse" />
+            <span>
+              أنت تعمل بدون إنترنت — آخر تحديث لبيانات الطلاب كان:{" "}
+              <strong className="font-black text-[var(--primary)]">{lastCacheTime || "غير محدد"}</strong>
+            </span>
+          </div>
+          <span className="rounded-lg bg-[var(--card-soft)] px-2.5 py-1 text-[11px] font-black text-[var(--primary)] border border-[var(--border-color)]">
+            PWA Offline Examiner Mode
+          </span>
+        </aside>
+      ) : null}
+
+      {/* Pending Official Exams Section */}
+      {pendingSyncItems.length > 0 ? (
+        <PendingExamsList items={pendingSyncItems} onRefresh={() => void refreshPendingExams()} />
+      ) : null}
+
       {notice ? (
         <div
           role="status"
           className={`rounded-2xl border px-4 py-3 text-sm font-bold ${
             notice.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-              : "border-red-200 bg-red-50 text-red-800"
+              ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
+              : "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]"
           }`}
         >
           {notice.text}
         </div>
       ) : null}
 
-      <section className="rounded-3xl border border-sky-100 bg-white p-4 shadow-sm sm:p-5">
+      <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-bold text-sky-700">{editing ? "تعديل اختبار" : "اختبار رسمي جديد"}</p>
-            <h2 className="mt-1 text-xl font-black text-slate-950">
+            <p className="text-xs font-bold text-[var(--gold)]">{editing ? "تعديل اختبار" : "اختبار رسمي جديد"}</p>
+            <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">
               {editing ? `تعديل اختبار ${editing.student.displayName}` : "تسجيل نتيجة الطالب"}
             </h2>
-            <p className="mt-1 text-sm leading-6 text-slate-500">
+            <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
               التقدير يُحسب من الخادم حسب المرحلة، وتُحفظ الحلقة التي كان الطالب مسجلاً فيها بتاريخ الاختبار.
             </p>
           </div>
           {editing ? (
             <button
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700"
+              className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 py-2 text-sm font-black text-[var(--text-main)] hover:border-[var(--primary)] transition"
               type="button"
               onClick={cancelEdit}
             >
@@ -388,7 +566,7 @@ export function ExaminerExamsPanel({
           </div>
 
           {!formStudents.length ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
+            <div className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-4 py-3 text-sm font-bold text-[var(--status-warning-text)]">
               لا يوجد طلاب نشطون في الحلقة المختارة.
             </div>
           ) : null}
@@ -483,7 +661,7 @@ export function ExaminerExamsPanel({
           </div>
 
           <button
-            className="min-h-12 w-full rounded-2xl bg-sky-800 px-5 text-sm font-black text-white transition hover:bg-sky-900 disabled:opacity-60"
+            className="min-h-12 w-full rounded-2xl bg-[var(--primary)] px-5 text-sm font-black text-white transition hover:bg-[var(--primary-dark)] disabled:opacity-60"
             disabled={busy === "create" || busy === "edit" || !form.studentId}
           >
             {busy === "create" || busy === "edit"
@@ -495,10 +673,10 @@ export function ExaminerExamsPanel({
         </form>
       </section>
 
-      <section className="rounded-3xl border border-sky-100 bg-white p-4 shadow-sm sm:p-5">
+      <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
         <div>
-          <p className="text-xs font-bold text-sky-700">البحث والتصفية</p>
-          <h2 className="mt-1 text-xl font-black text-slate-950">سجل الاختبارات الرسمية</h2>
+          <p className="text-xs font-bold text-[var(--gold)]">البحث والتصفية</p>
+          <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">سجل الاختبارات الرسمية</h2>
         </div>
 
         <form
@@ -564,7 +742,7 @@ export function ExaminerExamsPanel({
               <option value="ACTIVE">فعال</option>
               <option value="VOIDED">ملغى</option>
             </select>
-            <button className="rounded-xl bg-sky-800 px-4 text-sm font-black text-white" disabled={busy === "load"}>
+            <button className="rounded-xl bg-[var(--primary)] px-4 text-sm font-black text-white hover:bg-[var(--primary-dark)]" disabled={busy === "load"}>
               عرض
             </button>
           </div>
@@ -573,59 +751,59 @@ export function ExaminerExamsPanel({
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xl font-black text-slate-950">النتائج</h2>
-          <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-black text-sky-900">{exams.length}</span>
+          <h2 className="text-xl font-black text-[var(--text-main)]">النتائج</h2>
+          <span className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1 text-xs font-black text-[var(--primary)]">{exams.length}</span>
         </div>
 
         {exams.length ? (
           exams.map((exam) => (
             <article
               key={exam.id}
-              className={`rounded-3xl border bg-white p-4 shadow-sm sm:p-5 ${exam.status === "VOIDED" ? "border-red-100 opacity-75" : "border-sky-100"}`}
+              className={`rounded-3xl border bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 transition-colors duration-200 ${exam.status === "VOIDED" ? "border-[var(--status-danger-border)] opacity-75" : "border-[var(--border-color)]"}`}
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-black text-slate-950">{exam.student.displayName}</h3>
+                    <h3 className="text-lg font-black text-[var(--text-main)]">{exam.student.displayName}</h3>
                     <span className={`rounded-full px-3 py-1 text-[11px] font-black ${resultStyle(exam.resultLabel)}`}>
                       {exam.resultLabel ?? "بدون تقدير"}
                     </span>
                     {exam.status === "VOIDED" ? (
-                      <span className="rounded-full bg-red-100 px-3 py-1 text-[11px] font-black text-red-800">ملغى</span>
+                      <span className="rounded-full border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 py-1 text-[11px] font-black text-[var(--status-danger-text)]">ملغى</span>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
                     {exam.enrollment?.stageName ?? "—"} — {exam.enrollment?.halaqaName ?? "بدون حلقة مرتبطة"}
                   </p>
-                  <p className="mt-2 text-sm font-bold text-slate-800">
+                  <p className="mt-2 text-sm font-bold text-[var(--text-main)]">
                     {examTypeLabel(exam.examType)} — {exam.scopes.map((scope) => scope.label).join("، ") || "بدون نطاق"}
                   </p>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
                     {exam.examDate} — المختبر: {exam.examiner.displayName}
                   </p>
                 </div>
                 <div className="text-center">
-                  <div className="text-4xl font-black text-sky-900">{exam.score ?? "—"}</div>
-                  <div className="text-xs font-bold text-slate-500">من 100</div>
+                  <div className="text-4xl font-black text-[var(--primary)]">{exam.score ?? "—"}</div>
+                  <div className="text-xs font-bold text-[var(--text-muted)]">من 100</div>
                 </div>
               </div>
 
-              {exam.notes ? <p className="mt-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">{exam.notes}</p> : null}
+              {exam.notes ? <p className="mt-3 rounded-2xl bg-[var(--card-soft)] px-4 py-3 text-sm text-[var(--text-main)] border border-[var(--border-color)]">{exam.notes}</p> : null}
               {exam.status === "VOIDED" && exam.voidReason ? (
-                <p className="mt-3 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-800">سبب الإلغاء: {exam.voidReason}</p>
+                <p className="mt-3 rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-3 text-sm font-bold text-[var(--status-danger-text)]">سبب الإلغاء: {exam.voidReason}</p>
               ) : null}
 
               {exam.status === "ACTIVE" ? (
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
-                    className="rounded-xl border border-sky-200 px-4 py-2 text-sm font-black text-sky-900"
+                    className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 py-2 text-sm font-black text-[var(--text-main)] hover:border-[var(--primary)] transition"
                     type="button"
                     onClick={() => beginEdit(exam)}
                   >
                     تعديل
                   </button>
                   <button
-                    className="rounded-xl border border-red-200 px-4 py-2 text-sm font-black text-red-700 disabled:opacity-60"
+                    className="rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-2 text-sm font-black text-[var(--status-danger-text)] hover:opacity-90 disabled:opacity-60 transition"
                     type="button"
                     disabled={busy === `void-${exam.id}`}
                     onClick={() => void voidExam(exam)}
@@ -637,11 +815,136 @@ export function ExaminerExamsPanel({
             </article>
           ))
         ) : (
-          <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm font-bold text-slate-500">
+          <div className="rounded-3xl border border-dashed border-[var(--border-color)] bg-[var(--card-bg)] p-8 text-center text-sm font-bold text-[var(--text-muted)]">
             لا توجد اختبارات مطابقة للتصفية الحالية.
           </div>
         )}
       </section>
     </div>
+  );
+}
+
+function PendingExamsList({
+  items,
+  onRefresh,
+}: {
+  items: SyncQueueItem[];
+  onRefresh: () => void;
+}) {
+  const [syncing, setSyncing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const handleManualSync = useCallback(async () => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setNotice("⚠️ أنت غير متصل بالإنترنت حالياً. يرجى الاتصال بالإنترنت أولاً للمزامنة.");
+      return;
+    }
+
+    setSyncing(true);
+    setNotice(null);
+
+    const res = await processSyncQueue();
+    setSyncing(false);
+    onRefresh();
+
+    if (res.success > 0) {
+      setNotice(`✅ تم بنجاح مزامنة ${res.success} اختبار مع الخادم.`);
+    } else if (res.failed > 0) {
+      setNotice(`⚠️ تعذر مزامنة ${res.failed} اختبار. راجع أسباب الفشل أدناه.`);
+    } else {
+      setNotice("لا توجد اختبارات معلقة للمزامنة.");
+    }
+  }, [onRefresh]);
+
+  return (
+    <section className="rounded-3xl border border-[var(--status-info-border)] bg-[var(--status-info-bg)] p-5 shadow-sm space-y-4" dir="rtl">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--status-info-border)] pb-3">
+        <div>
+          <h3 className="text-base font-black text-[var(--status-info-text)] flex items-center gap-2">
+            <span>📝 اختبارات بانتظار المزامنة ({items.length})</span>
+          </h3>
+          <p className="mt-0.5 text-xs font-bold text-[var(--text-muted)]">
+            تم حفظ هذه الاختبارات الرسمية محلياً على هذا الجهاز لعدم توفر إنترنت.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          disabled={syncing || (typeof navigator !== "undefined" && !navigator.onLine)}
+          onClick={() => void handleManualSync()}
+          className="rounded-2xl bg-[var(--primary)] px-5 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[var(--primary-dark)] disabled:opacity-50"
+        >
+          {syncing ? "جاري المزامنة..." : "🔄 مزامنة الآن"}
+        </button>
+      </div>
+
+      {notice ? (
+        <div className="rounded-2xl bg-[var(--card-bg)] p-3 text-xs font-black text-[var(--text-main)] border border-[var(--border-color)]">
+          {notice}
+        </div>
+      ) : null}
+
+      <div className="space-y-3">
+        {items.map((item) => {
+          const payload = item.payload as {
+            studentName?: string;
+            halaqaName?: string;
+            score?: number;
+            examDate?: string;
+            juzFrom?: number;
+            juzTo?: number;
+            examType?: string;
+          };
+
+          return (
+            <div
+              key={item.queueId}
+              className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-2xs space-y-2 text-[var(--text-main)]"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-sm font-black text-[var(--text-main)]">
+                    اختبار الطالب: <span className="text-[var(--primary)]">{payload.studentName || "طالب"}</span> ({payload.halaqaName || "حلقة"})
+                  </h4>
+                  <p className="text-xs font-bold text-[var(--text-muted)]">
+                    التاريخ: {payload.examDate} | الدرجة: <span className="font-black text-[var(--primary)]">{payload.score}/100</span> | النطاق: {payload.examType === "INDIVIDUAL" ? `الجزء ${payload.juzFrom}` : `من الجزء ${payload.juzFrom} إلى ${payload.juzTo}`}
+                  </p>
+                </div>
+
+                <div>
+                  {item.status === "pending" ? (
+                    <span className="rounded-xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3 py-1 text-xs font-extrabold text-[var(--status-warning-text)]">
+                      🟠 بانتظار المزامنة
+                    </span>
+                  ) : item.status === "syncing" ? (
+                    <span className="rounded-xl border border-[var(--status-info-border)] bg-[var(--status-info-bg)] px-3 py-1 text-xs font-extrabold text-[var(--status-info-text)]">
+                      🔵 جاري المزامنة...
+                    </span>
+                  ) : item.status === "conflict" ? (
+                    <span className="rounded-xl border border-purple-300 bg-purple-100 dark:bg-purple-950 dark:border-purple-800 dark:text-purple-300 px-3 py-1 text-xs font-extrabold text-purple-900">
+                      ⚠️ تعارض في البيانات (409)
+                    </span>
+                  ) : item.status === "failed" ? (
+                    <span className="rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 py-1 text-xs font-extrabold text-[var(--status-danger-text)]">
+                      🔴 فشلت المزامنة
+                    </span>
+                  ) : (
+                    <span className="rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-3 py-1 text-xs font-extrabold text-[var(--status-success-text)]">
+                      ✅ تمت المزامنة
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {item.errorMessage ? (
+                <div className="rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-2 text-xs font-bold text-[var(--status-danger-text)]">
+                  <span className="font-black">سبب عدم الإكمال:</span> {item.errorMessage}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }

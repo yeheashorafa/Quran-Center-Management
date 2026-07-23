@@ -125,21 +125,21 @@ export function TeacherStudentsPanel({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" dir="rtl">
       {/* Header & Actions */}
-      <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
+      <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <span className="text-xs font-bold text-emerald-800">إدارة طلاب الحلقة</span>
-            <h2 className="mt-1 text-xl font-black text-slate-950">قائمة الطلاب المباشرة</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <span className="text-xs font-bold text-[var(--gold)]">إدارة طلاب الحلقة</span>
+            <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">قائمة الطلاب المباشرة</h2>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
               يمكنك إضافة طلاب جديدين، وتعديل كافة بياناتهم، واستخراج تقارير ولي الأمر.
             </p>
           </div>
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
-            className="min-h-12 rounded-2xl bg-emerald-900 px-5 text-sm font-black text-white shadow-md transition hover:bg-emerald-950"
+            className="min-h-12 rounded-2xl bg-[var(--primary)] px-5 text-sm font-black text-white shadow-md transition hover:bg-[var(--primary-dark)]"
           >
             ➕ إضافة طالب جديد للحلقة
           </button>
@@ -160,8 +160,8 @@ export function TeacherStudentsPanel({
           <div
             className={`mt-4 rounded-2xl border px-4 py-3 text-xs font-extrabold ${
               notice.type === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                : "border-red-200 bg-red-50 text-red-800"
+                ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
+                : "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]"
             }`}
           >
             {notice.text}
@@ -173,35 +173,35 @@ export function TeacherStudentsPanel({
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {filteredStudents.length ? (
           filteredStudents.map((student) => (
-            <article key={student.studentId} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col justify-between">
+            <article key={student.studentId} className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm flex flex-col justify-between text-[var(--text-main)] transition-colors duration-200">
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h3 className="text-base font-black text-slate-950">{student.displayName}</h3>
-                    <p className="text-xs font-bold text-slate-500 mt-0.5">{student.fullName}</p>
+                    <h3 className="text-base font-black text-[var(--text-main)]">{student.displayName}</h3>
+                    <p className="text-xs font-bold text-[var(--text-muted)] mt-0.5">{student.fullName}</p>
                   </div>
-                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-900">
+                  <span className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-2.5 py-1 text-[10px] font-black text-[var(--primary)]">
                     {student.stageName}
                   </span>
                 </div>
 
-                <div className="mt-4 space-y-1.5 text-xs text-slate-600 font-bold">
+                <div className="mt-4 space-y-1.5 text-xs text-[var(--text-muted)] font-bold">
                   <div className="flex justify-between">
                     <span>الصف الدراسي:</span>
-                    <span className="text-slate-900">{student.gradeLevel || "غير مسجل"}</span>
+                    <span className="text-[var(--text-main)]">{student.gradeLevel || "غير مسجل"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>هاتف ولي الأمر:</span>
-                    <span className="text-slate-900" dir="ltr">{student.parentPhone || "غير مسجل"}</span>
+                    <span className="text-[var(--text-main)]" dir="ltr">{student.parentPhone || "غير مسجل"}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-5 border-t border-slate-100 pt-3 flex items-center gap-2">
+              <div className="mt-5 border-t border-[var(--border-color)] pt-3 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setEditingStudent(student)}
-                  className="min-h-10 rounded-xl bg-slate-100 text-slate-800 font-bold text-xs border border-slate-200 px-3 hover:bg-slate-200"
+                  className="min-h-10 rounded-xl bg-[var(--card-soft)] text-[var(--text-main)] font-bold text-xs border border-[var(--border-color)] px-3 hover:border-[var(--primary)] transition"
                 >
                   ✏️ تعديل
                 </button>
@@ -209,7 +209,7 @@ export function TeacherStudentsPanel({
                   type="button"
                   disabled={fetchingReportId === student.studentId}
                   onClick={() => openReport(student.studentId)}
-                  className="flex-1 min-h-10 rounded-xl bg-emerald-50 text-emerald-950 font-black text-xs border border-emerald-200 transition hover:bg-emerald-100 disabled:opacity-50"
+                  className="flex-1 min-h-10 rounded-xl bg-[var(--card-soft)] text-[var(--primary)] font-black text-xs border border-[var(--border-color)] transition hover:bg-[var(--primary)] hover:text-white disabled:opacity-50"
                 >
                   {fetchingReportId === student.studentId ? "جاري الاستخراج..." : "📜 تقرير ولي الأمر"}
                 </button>
@@ -217,7 +217,7 @@ export function TeacherStudentsPanel({
             </article>
           ))
         ) : (
-          <div className="col-span-full rounded-3xl border border-dashed border-slate-300 p-8 text-center text-sm font-bold text-slate-500">
+          <div className="col-span-full rounded-3xl border border-dashed border-[var(--border-color)] bg-[var(--card-bg)] p-8 text-center text-sm font-bold text-[var(--text-muted)]">
             لا يوجد طلاب مطبقين للبحث.
           </div>
         )}
@@ -226,9 +226,9 @@ export function TeacherStudentsPanel({
       {/* Add Student Modal */}
       {showAddModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-            <h3 className="text-lg font-black text-slate-900">إضافة طالب جديد للحلقة</h3>
-            <p className="mt-1 text-xs font-bold text-slate-500">
+          <div className="w-full max-w-md rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)]">
+            <h3 className="text-lg font-black text-[var(--text-main)]">إضافة طالب جديد للحلقة</h3>
+            <p className="mt-1 text-xs font-bold text-[var(--text-muted)]">
               سينضاف الطالب مباشرة وحصرياً لحلقتك الحالية.
             </p>
 
@@ -254,19 +254,19 @@ export function TeacherStudentsPanel({
                 <input type="date" name="memorizationStartedOn" className="form-control font-bold" />
               </div>
 
-              <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+              <div className="mt-6 flex items-center justify-end gap-3 border-t border-[var(--border-color)] pt-4">
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => setShowAddModal(false)}
-                  className="min-h-11 rounded-xl border border-slate-200 px-4 text-xs font-bold text-slate-700"
+                  className="min-h-11 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-xs font-bold text-[var(--text-main)] hover:border-[var(--primary)]"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={busy}
-                  className="min-h-11 rounded-xl bg-emerald-900 px-5 text-xs font-black text-white hover:bg-emerald-950 disabled:opacity-50"
+                  className="min-h-11 rounded-xl bg-[var(--primary)] px-5 text-xs font-black text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
                 >
                   {busy ? "جاري الإضافة..." : "حفظ وإضافة الطالب"}
                 </button>
@@ -279,9 +279,9 @@ export function TeacherStudentsPanel({
       {/* Edit Student Modal */}
       {editingStudent ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-            <h3 className="text-lg font-black text-slate-900">تعديل بيانات الطالب</h3>
-            <p className="mt-1 text-xs font-bold text-slate-500">
+          <div className="w-full max-w-md rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)]">
+            <h3 className="text-lg font-black text-[var(--text-main)]">تعديل بيانات الطالب</h3>
+            <p className="mt-1 text-xs font-bold text-[var(--text-muted)]">
               تعديل بيانات الطالب المعروضة بالمركز.
             </p>
 
@@ -333,19 +333,19 @@ export function TeacherStudentsPanel({
                 />
               </div>
 
-              <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+              <div className="mt-6 flex items-center justify-end gap-3 border-t border-[var(--border-color)] pt-4">
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => setEditingStudent(null)}
-                  className="min-h-11 rounded-xl border border-slate-200 px-4 text-xs font-bold text-slate-700"
+                  className="min-h-11 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-xs font-bold text-[var(--text-main)] hover:border-[var(--primary)]"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={busy}
-                  className="min-h-11 rounded-xl bg-emerald-900 px-5 text-xs font-black text-white hover:bg-emerald-950 disabled:opacity-50"
+                  className="min-h-11 rounded-xl bg-[var(--primary)] px-5 text-xs font-black text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
                 >
                   {busy ? "جاري التحديث..." : "حفظ التعديلات"}
                 </button>
