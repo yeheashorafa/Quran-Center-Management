@@ -53,9 +53,9 @@ export function ThemeToggle({
     >
       <div className="relative flex size-5 items-center justify-center text-[var(--gold)] transition group-hover:scale-110">
         {resolvedTheme === "dark" ? (
-          <Moon className="size-5 transition-transform duration-300" />
-        ) : (
           <Sun className="size-5 transition-transform duration-300" />
+        ) : (
+          <Moon className="size-5 transition-transform duration-300" />
         )}
       </div>
 

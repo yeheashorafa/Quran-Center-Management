@@ -262,30 +262,30 @@ export function StudentManagementPanel({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" dir="rtl">
       {notice ? (
         <div
           role="status"
           className={`rounded-2xl border px-4 py-3 text-sm font-bold ${
             notice.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-              : "border-red-200 bg-red-50 text-red-800"
+              ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
+              : "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]"
           }`}
         >
           {notice.text}
         </div>
       ) : null}
 
-      <div className="bg-[var(--card-bg)] grid items-start gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.45fr)]">
-        <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
-          <p className="text-xs font-bold text-emerald-700">ملفات الطلاب</p>
-          <h2 className="mt-1 text-xl font-black text-slate-950">إضافة طالب وتسجيله</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.45fr)]">
+        <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
+          <p className="text-xs font-bold text-[var(--gold)]">ملفات الطلاب</p>
+          <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">إضافة طالب وتسجيله</h2>
+          <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
             ينشأ ملف واحد ثابت للطالب، ثم يرتبط بالحَلَقة من خلال تسجيل مستقل.
           </p>
 
           {!halaqat.length ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">
+            <div className="mt-4 rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-3 text-sm font-bold text-[var(--status-warning-text)]">
               يجب إنشاء حلقة نشطة أولاً قبل تسجيل الطلاب.
             </div>
           ) : null}
@@ -294,7 +294,7 @@ export function StudentManagementPanel({
             <div>
               <label className="form-label" htmlFor="student-full-name">الاسم الكامل</label>
               <input
-                className="form-control"
+                className="form-control font-bold"
                 id="student-full-name"
                 name="fullName"
                 placeholder="الاسم الرباعي أو الكامل"
@@ -305,7 +305,7 @@ export function StudentManagementPanel({
             <div>
               <label className="form-label" htmlFor="student-display-name">اسم العرض</label>
               <input
-                className="form-control"
+                className="form-control font-bold"
                 id="student-display-name"
                 name="displayName"
                 placeholder="اختياري، يستخدم الاسم الكامل تلقائياً"
@@ -316,17 +316,18 @@ export function StudentManagementPanel({
               <div>
                 <label className="form-label" htmlFor="student-parent-phone">هاتف ولي الأمر</label>
                 <input
-                  className="form-control"
+                  className="form-control font-bold"
                   id="student-parent-phone"
                   name="parentPhone"
                   inputMode="tel"
                   placeholder="اختياري"
+                  dir="ltr"
                 />
               </div>
               <div>
                 <label className="form-label" htmlFor="student-grade-level">الصف الدراسي</label>
                 <input
-                  className="form-control"
+                  className="form-control font-bold"
                   id="student-grade-level"
                   name="gradeLevel"
                   placeholder="مثال: الصف السادس"
@@ -337,7 +338,7 @@ export function StudentManagementPanel({
             <div>
               <label className="form-label" htmlFor="student-started-memorization">تاريخ بداية الحفظ</label>
               <input
-                className="form-control"
+                className="form-control font-bold"
                 id="student-started-memorization"
                 name="memorizationStartedOn"
                 type="date"
@@ -347,7 +348,7 @@ export function StudentManagementPanel({
             <div>
               <label className="form-label" htmlFor="student-halaqa">الحلقة</label>
               <select
-                className="form-control"
+                className="form-control font-bold"
                 id="student-halaqa"
                 name="halaqaId"
                 required
@@ -367,7 +368,7 @@ export function StudentManagementPanel({
             <div>
               <label className="form-label" htmlFor="student-enrollment-start">تاريخ التسجيل في الحلقة</label>
               <input
-                className="form-control"
+                className="form-control font-bold"
                 id="student-enrollment-start"
                 name="startedOn"
                 type="date"
@@ -379,7 +380,7 @@ export function StudentManagementPanel({
             <div>
               <label className="form-label" htmlFor="student-notes">ملاحظات</label>
               <textarea
-                className="form-control min-h-24 resize-y"
+                className="form-control min-h-24 resize-y font-bold"
                 id="student-notes"
                 name="notes"
                 placeholder="اختياري"
@@ -387,7 +388,7 @@ export function StudentManagementPanel({
             </div>
 
             <button
-              className="min-h-12 w-full rounded-2xl bg-emerald-800 px-4 font-black text-white transition hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-h-12 w-full rounded-2xl bg-[var(--primary)] px-4 font-black text-white transition hover:bg-[var(--primary-dark)] disabled:cursor-not-allowed disabled:opacity-60"
               disabled={busyKey !== null || !halaqat.length}
             >
               {busyKey === "create-student" ? "جاري الحفظ..." : "إنشاء ملف الطالب وتسجيله"}
@@ -396,27 +397,27 @@ export function StudentManagementPanel({
         </section>
 
         <section className="space-y-4">
-          <div className="bg-[var(--card-bg)] rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
+          <div className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-xs font-bold text-emerald-700">الطلاب المسجلون</p>
-                <h2 className="mt-1 text-xl font-black text-slate-950">قائمة الطلاب</h2>
+                <p className="text-xs font-bold text-[var(--gold)]">الطلاب المسجلون</p>
+                <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">قائمة الطلاب</h2>
               </div>
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-900">
+              <span className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1 text-xs font-black text-[var(--primary)]">
                 {filteredStudents.length} من {students.length}
               </span>
             </div>
 
-            <div className="bg-[var(--card-bg)] mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <input
-                className="form-control sm:col-span-1"
+                className="form-control font-bold sm:col-span-1"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="بحث بالاسم أو الهاتف"
                 aria-label="بحث عن طالب"
               />
               <select
-                className="form-control"
+                className="form-control font-bold"
                 value={halaqaFilter}
                 onChange={(event) => setHalaqaFilter(event.target.value)}
                 aria-label="تصفية حسب الحلقة"
@@ -427,7 +428,7 @@ export function StudentManagementPanel({
                 ))}
               </select>
               <select
-                className="form-control"
+                className="form-control font-bold"
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
                 aria-label="تصفية حسب الحالة"
@@ -443,29 +444,29 @@ export function StudentManagementPanel({
             filteredStudents.map((student) => (
               <article
                 key={student.id}
-                className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5"
+                className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-black text-slate-950">{student.displayName}</h3>
+                      <h3 className="text-lg font-black text-[var(--text-main)]">{student.displayName}</h3>
                       <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+                        className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${
                           student.isActive
-                            ? "bg-emerald-100 text-emerald-900"
-                            : "bg-slate-200 text-slate-700"
+                            ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
+                            : "border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-muted)]"
                         }`}
                       >
                         {student.isActive ? "نشط" : "غير نشط"}
                       </span>
                     </div>
                     {student.fullName !== student.displayName ? (
-                      <p className="mt-1 text-sm text-slate-500">{student.fullName}</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">{student.fullName}</p>
                     ) : null}
                   </div>
-                  <div className="rounded-2xl bg-slate-50 px-3 py-2 text-center">
-                    <div className="text-lg font-black text-slate-900">{student.enrollmentsCount}</div>
-                    <div className="text-[10px] font-bold text-slate-500">تسجيل تاريخي</div>
+                  <div className="rounded-2xl bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-2 text-center">
+                    <div className="text-lg font-black text-[var(--primary)]">{student.enrollmentsCount}</div>
+                    <div className="text-[10px] font-bold text-[var(--text-muted)]">تسجيل تاريخي</div>
                   </div>
                 </div>
 
@@ -476,10 +477,10 @@ export function StudentManagementPanel({
                   <InfoItem label="هاتف ولي الأمر" value={student.parentPhone || "غير مسجل"} />
                 </div>
 
-                <div className="mt-4 border-t border-slate-100 pt-3 space-y-2">
+                <div className="mt-4 border-t border-[var(--border-color)] pt-3 space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <Link
-                      className="flex min-h-10 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-black text-emerald-900 transition hover:bg-emerald-100"
+                      className="flex min-h-10 items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] text-xs font-black text-[var(--primary)] transition hover:border-[var(--primary)] hover:bg-[var(--primary)] hover:text-white"
                       href={`/manager/students/${student.id}`}
                     >
                       📁 فتح الملف
@@ -488,7 +489,7 @@ export function StudentManagementPanel({
                     <button
                       type="button"
                       onClick={() => setEditingStudent(student)}
-                      className="min-h-10 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                      className="min-h-10 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] text-xs font-bold text-[var(--text-main)] transition hover:border-[var(--primary)]"
                     >
                       ✏️ تعديل
                     </button>
@@ -501,8 +502,8 @@ export function StudentManagementPanel({
                       onClick={() => toggleStudentStatus(student.id, student.isActive)}
                       className={`min-h-9 rounded-xl border text-[11px] font-bold transition disabled:opacity-50 ${
                         student.isActive
-                          ? "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
-                          : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                          ? "border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] hover:opacity-90"
+                          : "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)] hover:opacity-90"
                       }`}
                     >
                       {student.isActive ? "⏸️ تعطيل" : "▶️ تفعيل"}
@@ -513,7 +514,7 @@ export function StudentManagementPanel({
                         type="button"
                         disabled={busyKey !== null}
                         onClick={() => removeStudentFromHalaqa(student.id, student.activeEnrollment?.halaqa.nameAr || "")}
-                        className="min-h-9 rounded-xl border border-orange-200 bg-orange-50 text-orange-900 text-[11px] font-bold hover:bg-orange-100 disabled:opacity-50"
+                        className="min-h-9 rounded-xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] text-[11px] font-bold transition hover:opacity-90 disabled:opacity-50"
                       >
                         🚫 إزالة من الحلقة
                       </button>
@@ -525,7 +526,7 @@ export function StudentManagementPanel({
                       type="button"
                       disabled={busyKey !== null}
                       onClick={() => requestStudentPermanentDelete(student.id, student.displayName)}
-                      className="min-h-9 rounded-xl border border-red-200 bg-red-50 text-red-700 text-[11px] font-black hover:bg-red-100 disabled:opacity-50"
+                      className="min-h-9 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] text-[11px] font-black transition hover:opacity-90 disabled:opacity-50"
                     >
                       🗑️ حذف نهائي
                     </button>
@@ -534,7 +535,7 @@ export function StudentManagementPanel({
               </article>
             ))
           ) : (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm font-bold text-slate-500">
+            <div className="rounded-3xl border border-dashed border-[var(--border-color)] bg-[var(--card-bg)] p-8 text-center text-sm font-bold text-[var(--text-muted)]">
               لا توجد نتائج مطابقة.
             </div>
           )}
@@ -543,10 +544,10 @@ export function StudentManagementPanel({
 
       {/* Edit Student Modal for Manager */}
       {editingStudent ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs" dir="rtl">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-black text-slate-950">تعديل بيانات الطالب (المدير)</h3>
-            <p className="text-xs font-bold text-slate-500">تحديث البيانات الأساسية لملف الطالب.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs" dir="rtl">
+          <div className="w-full max-w-md rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)] space-y-4">
+            <h3 className="text-lg font-black text-[var(--text-main)]">تعديل بيانات الطالب (المدير)</h3>
+            <p className="text-xs font-bold text-[var(--text-muted)]">تحديث البيانات الأساسية لملف الطالب.</p>
 
             <form onSubmit={updateStudent} className="space-y-3">
               <div>
@@ -610,11 +611,11 @@ export function StudentManagementPanel({
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-color)]">
                 <button
                   type="button"
                   onClick={() => setEditingStudent(null)}
-                  className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                  className="min-h-11 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-xs font-bold text-[var(--text-main)] hover:border-[var(--primary)]"
                   disabled={busyKey !== null}
                 >
                   إلغاء
@@ -622,7 +623,7 @@ export function StudentManagementPanel({
 
                 <button
                   type="submit"
-                  className="min-h-11 rounded-xl bg-emerald-800 px-5 text-xs font-black text-white hover:bg-emerald-900 disabled:opacity-50"
+                  className="min-h-11 rounded-xl bg-[var(--primary)] px-5 text-xs font-black text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
                   disabled={busyKey !== null}
                 >
                   {busyKey === `edit-student-${editingStudent.id}` ? "جاري الحفظ..." : "حفظ التعديلات"}
@@ -635,18 +636,18 @@ export function StudentManagementPanel({
 
       {/* Student Permanent Delete Danger Modal for Manager */}
       {studentDeleteModal && studentDeleteModal.isOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs" dir="rtl">
-          <div className="w-full max-w-lg space-y-4 rounded-3xl border border-red-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-center gap-3 text-red-700">
-              <div className="flex size-10 items-center justify-center rounded-2xl bg-red-100 text-xl font-black">⚠️</div>
-              <h3 className="text-lg font-black text-slate-950">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs" dir="rtl">
+          <div className="w-full max-w-lg space-y-4 rounded-3xl border border-[var(--status-danger-border)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)]">
+            <div className="flex items-center gap-3 text-[var(--status-danger-text)]">
+              <div className="flex size-10 items-center justify-center rounded-2xl bg-[var(--status-danger-bg)] border border-[var(--status-danger-border)] text-xl font-black">⚠️</div>
+              <h3 className="text-lg font-black text-[var(--text-main)]">
                 {studentDeleteModal.hasLinkedData ? "تأكيد الحذف النهائي لطالب لديه بيانات" : "حذف الطالب نهائياً"}
               </h3>
             </div>
 
             {studentDeleteModal.hasLinkedData ? (
-              <div className="space-y-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-bold leading-6 text-red-900">
-                <p className="text-sm font-black text-red-950">هذا الطالب لديه بيانات مرتبطة. حذفه نهائياً سيؤدي إلى حذف:</p>
+              <div className="space-y-2 rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-4 text-xs font-bold leading-6 text-[var(--status-danger-text)]">
+                <p className="text-sm font-black text-[var(--status-danger-text)]">هذا الطالب لديه بيانات مرتبطة. حذفه نهائياً سيؤدي إلى حذف:</p>
                 <ul className="list-inside list-disc space-y-1">
                   <li>تسجيلاته في الحلقات ({studentDeleteModal.counts.enrollments} تسجيل)</li>
                   <li>جلسات التسميع الخاصة به ({studentDeleteModal.counts.sessions} جلسة)</li>
@@ -655,22 +656,22 @@ export function StudentManagementPanel({
                   <li>التقارير وسجلات المتابعة المرتبطة به</li>
                   <li>أي بيانات تشغيلية خاصة به</li>
                 </ul>
-                <p className="pt-1 font-black text-red-700">لا يمكن التراجع عن هذه العملية.</p>
+                <p className="pt-1 font-black text-[var(--status-danger-text)]">لا يمكن التراجع عن هذه العملية.</p>
               </div>
             ) : (
-              <p className="text-sm font-bold text-slate-600">
+              <p className="text-sm font-bold text-[var(--text-muted)]">
                 هل أنت متأكد من حذف الطالب ({studentDeleteModal.studentName}) نهائياً؟ لا يملك الطالب أي سجلات مرتبطة.
               </p>
             )}
 
             {studentDeleteModal.hasLinkedData ? (
               <div className="space-y-2">
-                <label className="block text-xs font-extrabold text-slate-700" htmlFor="student-confirm-input">
-                  اكتب اسم الطالب لتأكيد الحذف النهائي: <span className="font-black text-red-700">({studentDeleteModal.studentName})</span>
+                <label className="block text-xs font-extrabold text-[var(--text-main)]" htmlFor="student-confirm-input">
+                  اكتب اسم الطالب لتأكيد الحذف النهائي: <span className="font-black text-[var(--status-danger-text)]">({studentDeleteModal.studentName})</span>
                 </label>
                 <input
                   id="student-confirm-input"
-                  className="form-control border-red-300 text-sm font-bold focus:border-red-600 focus:ring-red-200"
+                  className="form-control text-sm font-bold"
                   placeholder="اكتب اسم الطالب هنا للتأكيد..."
                   value={studentDeleteModal.typedName}
                   onChange={(e) =>
@@ -683,7 +684,7 @@ export function StudentManagementPanel({
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
-                className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                className="min-h-11 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-sm font-bold text-[var(--text-main)] hover:border-[var(--primary)]"
                 onClick={() => setStudentDeleteModal(null)}
                 disabled={studentDeleteModal.loading}
               >
@@ -692,7 +693,7 @@ export function StudentManagementPanel({
 
               <button
                 type="button"
-                className="min-h-11 rounded-xl bg-red-700 px-5 text-sm font-black text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-11 rounded-xl bg-[var(--status-danger-text)] px-5 text-sm font-black text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={
                   studentDeleteModal.loading ||
                   (studentDeleteModal.hasLinkedData &&
@@ -715,9 +716,9 @@ export function StudentManagementPanel({
 
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-3">
-      <div className="text-[11px] font-extrabold text-slate-500">{label}</div>
-      <div className="mt-1 font-black text-slate-800">{value}</div>
+    <div className="rounded-2xl bg-[var(--card-soft)] border border-[var(--border-color)] p-3 text-[var(--text-main)]">
+      <div className="text-[11px] font-extrabold text-[var(--text-muted)]">{label}</div>
+      <div className="mt-1 font-black text-[var(--text-main)]">{value}</div>
     </div>
   );
 }

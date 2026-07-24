@@ -16,10 +16,10 @@ export function DashboardShell({
       <header className="sticky top-0 z-20 border-b border-[var(--border-color)] bg-[var(--card-bg)]/95 px-4 shadow-xs backdrop-blur-md transition-colors duration-200">
         <div className="mx-auto flex h-20 w-full max-w-6xl items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="relative size-48 shrink-0 sm:size-16">
+            <div className="relative size-20 shrink-0 sm:size-60">
               <DynamicDashboardLogo
                 alt={`شعار ${appConfig.centerName}`}
-                sizes="200px"
+                sizes="240px"
               />
             </div>
           </div>
