@@ -21,7 +21,6 @@ export function DashboardShell({
                 src="/brand/logo.png"
                 alt={`شعار ${appConfig.centerName}`}
                 fill
-                priority
                 sizes="64px"
                 className="object-contain"
               />

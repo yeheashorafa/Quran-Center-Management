@@ -13,7 +13,7 @@ export function ThemeToggle({
   showLabel?: boolean;
   className?: string;
 }) {
-  const { theme, resolvedTheme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const mounted = useSyncExternalStore(
     emptySubscribe,
     () => true,
@@ -31,14 +31,16 @@ export function ThemeToggle({
   }
 
   const cycleTheme = () => {
-    if (theme === "light") setTheme("dark");
-    else if (theme === "dark") setTheme("light");
+    if (resolvedTheme === "dark") {
+      setTheme("light");
+    } else {
+      setTheme("dark");
+    }
   };
 
   const getLabel = () => {
-    if (theme === "light") return "المظهر الفاتح";
-    if (theme === "dark") return "المظهر الداكن";
-    return "حسب الجهاز";
+    if (resolvedTheme === "dark") return "المظهر الداكن";
+    return "المظهر الفاتح";
   };
 
   return (

@@ -40,6 +40,19 @@ function getStoredTheme(): Theme {
   return "system";
 }
 
+function applyTheme(resolved: ResolvedTheme) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  root.setAttribute("data-theme", resolved);
+  if (resolved === "dark") {
+    root.classList.add("dark");
+    root.classList.remove("light");
+  } else {
+    root.classList.add("light");
+    root.classList.remove("dark");
+  }
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("system");
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
@@ -52,7 +65,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       const initialResolved =
         initialTheme === "system" ? getSystemTheme() : (initialTheme as ResolvedTheme);
       setResolvedTheme(initialResolved);
-      document.documentElement.setAttribute("data-theme", initialResolved);
+      applyTheme(initialResolved);
       setMounted(true);
     });
   }, []);
@@ -68,7 +81,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const nextResolved =
       newTheme === "system" ? getSystemTheme() : (newTheme as ResolvedTheme);
     setResolvedTheme(nextResolved);
-    document.documentElement.setAttribute("data-theme", nextResolved);
+    applyTheme(nextResolved);
   };
 
   const toggleTheme = () => {
@@ -88,7 +101,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (theme === "system") {
         const next = mediaQuery.matches ? "dark" : "light";
         setResolvedTheme(next);
-        document.documentElement.setAttribute("data-theme", next);
+        applyTheme(next);
       }
     };
 
@@ -119,7 +132,15 @@ export const themeInitScript = `
     var resolved = theme === "system" 
       ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
       : theme;
-    document.documentElement.setAttribute("data-theme", resolved);
+    var root = document.documentElement;
+    root.setAttribute("data-theme", resolved);
+    if (resolved === "dark") {
+      root.classList.add("dark");
+      root.classList.remove("light");
+    } else {
+      root.classList.add("light");
+      root.classList.remove("dark");
+    }
   } catch (e) {}
 })();
 `;
