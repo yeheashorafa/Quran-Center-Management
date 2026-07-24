@@ -36,9 +36,9 @@ export function ConfirmDialog({
   if (!isOpen) return null;
 
   const variantStyles = {
-    danger: "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500",
-    warning: "bg-amber-600 hover:bg-amber-700 text-white focus:ring-amber-500",
-    info: "bg-emerald-900 hover:bg-emerald-950 text-white focus:ring-emerald-500",
+    danger: "bg-[var(--status-danger-text)] hover:opacity-90 text-white focus:ring-red-500",
+    warning: "bg-[var(--status-warning-text)] hover:opacity-90 text-white focus:ring-amber-500",
+    info: "bg-[var(--primary)] hover:bg-[var(--primary-dark)] text-white focus:ring-emerald-500",
   }[variant];
 
   return (
@@ -48,36 +48,37 @@ export function ConfirmDialog({
       aria-labelledby="confirm-dialog-title"
       aria-describedby="confirm-dialog-description"
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs animate-in fade-in duration-200"
+      dir="rtl"
     >
-      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl transition-all sm:p-7">
+      <div className="w-full max-w-md rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl transition-all sm:p-7 text-[var(--text-main)]">
         <div className="flex items-start gap-4">
           <div
-            className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${
+            className={`flex size-12 shrink-0 items-center justify-center rounded-2xl border ${
               variant === "danger"
-                ? "bg-red-100 text-red-700"
+                ? "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]"
                 : variant === "warning"
-                  ? "bg-amber-100 text-amber-700"
-                  : "bg-emerald-100 text-emerald-900"
+                  ? "border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]"
+                  : "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
             }`}
           >
             <span className="text-xl">{variant === "danger" ? "⚠️" : variant === "warning" ? "🔒" : "ℹ️"}</span>
           </div>
           <div>
-            <h3 id="confirm-dialog-title" className="text-lg font-black text-slate-900">
+            <h3 id="confirm-dialog-title" className="text-lg font-black text-[var(--text-main)]">
               {title}
             </h3>
-            <p id="confirm-dialog-description" className="mt-2 text-sm leading-6 font-bold text-slate-600">
+            <p id="confirm-dialog-description" className="mt-2 text-sm leading-6 font-bold text-[var(--text-muted)]">
               {description}
             </p>
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+        <div className="mt-6 flex items-center justify-end gap-3 border-t border-[var(--border-color)] pt-4">
           <button
             type="button"
             disabled={loading}
             onClick={onClose}
-            className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            className="min-h-11 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-sm font-bold text-[var(--text-main)] transition hover:border-[var(--primary)] disabled:opacity-50"
           >
             {cancelText}
           </button>

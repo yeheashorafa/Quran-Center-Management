@@ -3,17 +3,28 @@
 :root, [data-theme="light"], .light {
   color-scheme: light;
   --bg-app: #F7FAF7;
+  --background: #F7FAF7;
+  --foreground: #17231D;
+  --text-main: #17231D;
   --card-bg: #FFFFFF;
+  --card: #FFFFFF;
+  --card-foreground: #17231D;
   --card-soft: #EEF5EF;
+  --surface-soft: #EEF5EF;
+  --muted: #E6F0E8;
+  --text-muted: #5C6B62;
+  --muted-foreground: #5C6B62;
+  --border-color: #DDE7DF;
+  --border: #DDE7DF;
   --primary: #07583A;
   --primary-dark: #03472F;
   --primary-light: #E6F3EC;
   --gold: #C79A28;
   --gold-dark: #9A7117;
   --gold-light: #FDF8EC;
-  --text-main: #17231D;
-  --text-muted: #5C6B62;
-  --border-color: #DDE7DF;
+  --danger: #9B1C1C;
+  --warning: #966708;
+  --success: #056636;
 
   --input-bg: #FFFFFF;
   --input-border: #DDE7DF;
@@ -35,38 +46,47 @@
   --status-info-text: #1E40AF;
 
   --page-background: #F7FAF7;
-  --foreground: #17231D;
 
   --shadow-subtle: 0 4px 20px -2px rgba(7, 88, 58, 0.05), 0 2px 6px -1px rgba(7, 88, 58, 0.03);
   --shadow-card: 0 10px 30px -4px rgba(7, 88, 58, 0.08), 0 4px 12px -2px rgba(7, 88, 58, 0.04);
 }
 
 [data-theme="dark"], .dark {
-
   color-scheme: dark;
   --bg-app: #07140F;
+  --background: #07140F;
+  --foreground: #F5F7F4;
+  --text-main: #F5F7F4;
   --card-bg: #0D2118;
+  --card: #0D2118;
+  --card-foreground: #F5F7F4;
   --card-soft: #123325;
+  --surface-soft: #123325;
+  --muted: #10291E;
+  --text-muted: #B8C7BE;
+  --muted-foreground: #B8C7BE;
+  --border-color: #244536;
+  --border: #244536;
   --primary: #3BBF84;
   --primary-dark: #0E6B49;
   --primary-light: #164230;
   --gold: #D7AF45;
   --gold-dark: #B98A24;
   --gold-light: #2D2612;
-  --text-main: #F5F7F4;
-  --text-muted: #B8C7BE;
-  --border-color: #244536;
+  --danger: #F87171;
+  --warning: #FBBF24;
+  --success: #34D399;
 
   --input-bg: #0A1C14;
   --input-border: #244536;
 
   --status-success-bg: #0E3623;
   --status-success-border: #1B5C3C;
-  --status-success-text: #4ADE80;
+  --status-success-text: #34D399;
 
   --status-warning-bg: #36290C;
   --status-warning-border: #5C4717;
-  --status-warning-text: #FACC15;
+  --status-warning-text: #FBBF24;
 
   --status-danger-bg: #3B1616;
   --status-danger-border: #6B2323;
@@ -77,7 +97,6 @@
   --status-info-text: #60A5FA;
 
   --page-background: #07140F;
-  --foreground: #F5F7F4;
 
   --shadow-subtle: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
   --shadow-card: 0 10px 30px -4px rgba(0, 0, 0, 0.6);
@@ -119,7 +138,7 @@ textarea {
 .form-control {
   min-height: 3rem;
   width: 100%;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--input-border);
   border-radius: 1rem;
   background-color: var(--input-bg);
   padding: 0.75rem 1rem;
@@ -142,7 +161,7 @@ select {
   width: 100%;
   background-color: var(--input-bg);
   color: var(--text-main);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--input-border);
   border-radius: 1rem;
   padding: 0.75rem 2.25rem 0.75rem 1rem;
   outline: none;

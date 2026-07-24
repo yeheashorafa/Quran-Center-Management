@@ -20,9 +20,9 @@ function formatDateTime(value: string): string {
 function JsonBlock({ title, value }: { title: string; value: unknown }) {
   if (value === null || value === undefined) return null;
   return (
-    <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <summary className="cursor-pointer text-xs font-black text-slate-700">{title}</summary>
-      <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words text-left text-[11px] leading-5 text-slate-600" dir="ltr">
+    <details className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] p-3 text-[var(--text-main)]">
+      <summary className="cursor-pointer text-xs font-black text-[var(--primary)]">{title}</summary>
+      <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words text-left text-[11px] leading-5 text-[var(--text-muted)]" dir="ltr">
         {JSON.stringify(value, null, 2)}
       </pre>
     </details>
@@ -84,11 +84,11 @@ export function AuditLogPanel() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
-        <p className="text-xs font-bold text-emerald-700">سجل التدقيق الإداري</p>
-        <h2 className="mt-1 text-xl font-black text-slate-950">من غيّر ماذا ومتى؟</h2>
-        <p className="mt-1 text-sm leading-6 text-slate-500">
+    <div className="space-y-5" dir="rtl">
+      <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
+        <p className="text-xs font-bold text-[var(--gold)]">سجل التدقيق الإداري</p>
+        <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">من غيّر ماذا ومتى؟</h2>
+        <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
           السجل للقراءة فقط، ويعرض المستخدم والعملية والقيم القديمة والجديدة وبيانات الطلب.
         </p>
 
@@ -132,42 +132,61 @@ export function AuditLogPanel() {
               {data?.filters.entityTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </div>
-          <button className="min-h-12 self-end rounded-2xl bg-emerald-800 px-5 text-sm font-black text-white hover:bg-emerald-900">
+          <button className="min-h-12 self-end rounded-2xl bg-[var(--primary)] px-5 text-sm font-black text-white hover:bg-[var(--primary-dark)] transition">
             تطبيق الفلاتر
           </button>
         </form>
       </section>
 
-      {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">{error}</div> : null}
+      {error ? (
+        <div className="rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-4 text-sm font-bold text-[var(--status-danger-text)]">
+          {error}
+        </div>
+      ) : null}
 
-      <section className="space-y-3">
+      <section className="space-y-3 text-[var(--text-main)]">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-lg font-black text-slate-950">العمليات المسجلة</h3>
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-900">{data?.pagination.totalItems ?? 0}</span>
+          <h3 className="text-lg font-black text-[var(--text-main)]">العمليات المسجلة</h3>
+          <span className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1 text-xs font-black text-[var(--primary)]">
+            {data?.pagination.totalItems ?? 0}
+          </span>
         </div>
 
         {loading ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-500">جاري تحميل سجل التدقيق...</div>
+          <div className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-8 text-center text-sm font-bold text-[var(--text-muted)]">
+            جاري تحميل سجل التدقيق...
+          </div>
         ) : data?.items.length ? (
           data.items.map((item) => (
-            <article key={item.id} className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
+            <article key={item.id} className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="font-black text-slate-950">{item.actionLabel}</h4>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-700">{item.entityLabel}</span>
+                    <h4 className="font-black text-[var(--text-main)]">{item.actionLabel}</h4>
+                    <span className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-2.5 py-1 text-[10px] font-black text-[var(--primary)]">
+                      {item.entityLabel}
+                    </span>
                   </div>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
                     {item.actor ? `${item.actor.displayName} (@${item.actor.username})` : "عملية نظام"}
                   </p>
                 </div>
-                <time className="text-xs font-bold text-slate-500">{formatDateTime(item.createdAt)}</time>
+                <time className="text-xs font-bold text-[var(--text-muted)]">{formatDateTime(item.createdAt)}</time>
               </div>
 
               <dl className="mt-4 grid gap-2 text-xs sm:grid-cols-3">
-                <div className="rounded-xl bg-slate-50 p-3"><dt className="font-bold text-slate-500">معرّف الكيان</dt><dd className="mt-1 break-all font-mono text-slate-700" dir="ltr">{item.entityId ?? "—"}</dd></div>
-                <div className="rounded-xl bg-slate-50 p-3"><dt className="font-bold text-slate-500">عنوان IP</dt><dd className="mt-1 font-mono text-slate-700" dir="ltr">{item.ipAddress ?? "—"}</dd></div>
-                <div className="rounded-xl bg-slate-50 p-3"><dt className="font-bold text-slate-500">Request ID</dt><dd className="mt-1 break-all font-mono text-slate-700" dir="ltr">{item.requestId ?? "—"}</dd></div>
+                <div className="rounded-xl bg-[var(--card-soft)] border border-[var(--border-color)] p-3">
+                  <dt className="font-bold text-[var(--text-muted)]">معرّف الكيان</dt>
+                  <dd className="mt-1 break-all font-mono text-[var(--text-main)]" dir="ltr">{item.entityId ?? "—"}</dd>
+                </div>
+                <div className="rounded-xl bg-[var(--card-soft)] border border-[var(--border-color)] p-3">
+                  <dt className="font-bold text-[var(--text-muted)]">عنوان IP</dt>
+                  <dd className="mt-1 font-mono text-[var(--text-main)]" dir="ltr">{item.ipAddress ?? "—"}</dd>
+                </div>
+                <div className="rounded-xl bg-[var(--card-soft)] border border-[var(--border-color)] p-3">
+                  <dt className="font-bold text-[var(--text-muted)]">Request ID</dt>
+                  <dd className="mt-1 break-all font-mono text-[var(--text-main)]" dir="ltr">{item.requestId ?? "—"}</dd>
+                </div>
               </dl>
 
               <div className="mt-3 grid gap-2 lg:grid-cols-3">
@@ -178,14 +197,32 @@ export function AuditLogPanel() {
             </article>
           ))
         ) : (
-          <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm font-bold text-slate-500">لا توجد عمليات مطابقة للفلاتر.</div>
+          <div className="rounded-3xl border border-dashed border-[var(--border-color)] bg-[var(--card-bg)] p-8 text-center text-sm font-bold text-[var(--text-muted)]">
+            لا توجد عمليات مطابقة للفلاتر.
+          </div>
         )}
 
         {data && data.pagination.totalPages > 1 ? (
-          <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
-            <button type="button" disabled={page <= 1 || loading} onClick={() => void load(Math.max(page - 1, 1))} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black disabled:opacity-40">السابق</button>
-            <span className="text-sm font-black text-slate-700">{data.pagination.page} / {data.pagination.totalPages}</span>
-            <button type="button" disabled={page >= data.pagination.totalPages || loading} onClick={() => void load(page + 1)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black disabled:opacity-40">التالي</button>
+          <div className="flex items-center justify-center gap-3 rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)] p-3">
+            <button
+              type="button"
+              disabled={page <= 1 || loading}
+              onClick={() => void load(Math.max(page - 1, 1))}
+              className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 py-2 text-sm font-black text-[var(--text-main)] hover:border-[var(--primary)] disabled:opacity-40"
+            >
+              السابق
+            </button>
+            <span className="text-sm font-black text-[var(--text-main)]">
+              {data.pagination.page} / {data.pagination.totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={page >= data.pagination.totalPages || loading}
+              onClick={() => void load(page + 1)}
+              className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 py-2 text-sm font-black text-[var(--text-main)] hover:border-[var(--primary)] disabled:opacity-40"
+            >
+              التالي
+            </button>
           </div>
         ) : null}
       </section>

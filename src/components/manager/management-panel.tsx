@@ -11,7 +11,6 @@ import { ManagerAlertsPanel } from "@/components/manager/manager-alerts-panel";
 import { StudentFollowUpPanel } from "@/components/manager/student-follow-up-panel";
 import { AuditLogPanel } from "@/components/manager/audit-log-panel";
 import { ParentReportSelector } from "@/components/reports/parent-report-selector";
-import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import type { ManagerDailyMonitoringData } from "@/lib/manager-monitoring/types";
 
 type ActiveTab = "monitoring" | "alerts" | "followup" | "parent_report" | "students" | "halaqat" | "users" | "audit";
@@ -101,6 +100,41 @@ export function ManagementPanel({
     );
   }
 
+  async function createHalaqa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    setBusyKey("create-halaqa");
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/manager/halaqat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nameAr: formData.get("nameAr"),
+          stageId: halaqaStageId,
+          teacherUserId: formData.get("teacherUserId"),
+          weekdays: halaqaWeekdays,
+          effectiveFrom: formData.get("effectiveFrom"),
+          notes: formData.get("notes"),
+        }),
+      });
+
+      const message = await readApiMessage(response);
+      if (!response.ok) throw new Error(message);
+
+      form.reset();
+      setHalaqaWeekdays(firstStage?.defaultWeekdays ?? []);
+      showResult("success", message);
+      router.refresh();
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر إنشاء الحلقة.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   async function createUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -113,8 +147,8 @@ export function ManagementPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: formData.get("username"),
           displayName: formData.get("displayName"),
+          username: formData.get("username"),
           password: formData.get("password"),
           role: formData.get("role"),
         }),
@@ -133,169 +167,38 @@ export function ManagementPanel({
     }
   }
 
-  const [confirmState, setConfirmState] = useState<{
-    isOpen: boolean;
-    title: string;
-    description: string;
-    confirmText?: string;
-    variant?: "danger" | "warning" | "info";
-    onConfirm: () => Promise<void> | void;
-  } | null>(null);
-  const [confirmLoading, setConfirmLoading] = useState(false);
-
-  async function updateUserStatus(userId: string, status: "ACTIVE" | "DISABLED") {
-    const key = `user-${userId}`;
-    setBusyKey(key);
-    setNotice(null);
-
-    try {
-      const response = await fetch(`/api/manager/users/${userId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      const message = await readApiMessage(response);
-      if (!response.ok) throw new Error(message);
-      showResult("success", message);
-      router.refresh();
-    } catch (error) {
-      showResult("error", error instanceof Error ? error.message : "تعذر تحديث المستخدم.");
-    } finally {
-      setBusyKey(null);
-    }
-  }
-
-  function requestUserStatusToggle(userId: string, status: "ACTIVE" | "DISABLED", displayName: string) {
-    if (status === "DISABLED") {
-      setConfirmState({
-        isOpen: true,
-        title: "تأكيد إيقاف الحساب",
-        description: `هل تريد إيقاف حساب المستخدم (${displayName})؟ لن يستطيع تسجيل الدخول إلى اللوحة حتى إعادة التفعيل.`,
-        confirmText: "إيقاف الحساب",
-        variant: "danger",
-        onConfirm: async () => {
-          setConfirmLoading(true);
-          await updateUserStatus(userId, status);
-          setConfirmLoading(false);
-          setConfirmState(null);
-        },
-      });
-    } else {
-      void updateUserStatus(userId, status);
-    }
-  }
-
-  function requestUserPermanentDelete(userId: string, displayName: string) {
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      showResult("error", "الحذف النهائي يحتاج اتصالاً بالإنترنت.");
+  async function requestHalaqaStatusToggle(
+    halaqaId: string,
+    targetStatus: "ACTIVE" | "INACTIVE",
+    nameAr: string,
+  ) {
+    const isDeactivating = targetStatus === "INACTIVE";
+    if (!confirm(isDeactivating ? `هل أنت متأكد من إيقاف حلقة (${nameAr})؟ سيتم إنهاء الأساليب التشغيلية دون حذف أي بيانات تاريخية.` : `هل أنت متأكد من إعادة تفعيل حلقة (${nameAr})؟`)) {
       return;
     }
 
-    setConfirmState({
-      isOpen: true,
-      title: "تأكيد الحذف النهائي للمستخدم",
-      description: `هل أنت متأكد من حذف المستخدم (${displayName}) نهائياً؟ إذا كان لدى المستخدم سجلات في النظام، سيتم منع الحذف لحماية البيانات.`,
-      confirmText: "حذف نهائي",
-      variant: "danger",
-      onConfirm: async () => {
-        setConfirmLoading(true);
-        const key = `delete-user-${userId}`;
-        setBusyKey(key);
-        setNotice(null);
-        try {
-          const response = await fetch(`/api/manager/users/${userId}`, {
-            method: "DELETE",
-          });
-          const message = await readApiMessage(response);
-          if (!response.ok) throw new Error(message);
-
-          showResult("success", message);
-          router.refresh();
-        } catch (error) {
-          showResult("error", error instanceof Error ? error.message : "تعذر حذف المستخدم.");
-        } finally {
-          setConfirmLoading(false);
-          setConfirmState(null);
-          setBusyKey(null);
-        }
-      },
-    });
-  }
-
-  async function createHalaqa(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    setBusyKey("create-halaqa");
-    setNotice(null);
-
-    try {
-      const response = await fetch("/api/manager/halaqat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nameAr: formData.get("nameAr"),
-          stageId: halaqaStageId,
-          teacherUserId: formData.get("teacherUserId"),
-          effectiveFrom: formData.get("effectiveFrom"),
-          notes: formData.get("notes"),
-          weekdays: halaqaWeekdays,
-        }),
-      });
-
-      const message = await readApiMessage(response);
-      if (!response.ok) throw new Error(message);
-
-      form.reset();
-      if (firstStage) handleStageChange(firstStage.id);
-      showResult("success", message);
-      router.refresh();
-    } catch (error) {
-      showResult("error", error instanceof Error ? error.message : "تعذر إنشاء الحلقة.");
-    } finally {
-      setBusyKey(null);
-    }
-  }
-
-  async function updateHalaqaStatus(halaqaId: string, status: "ACTIVE" | "INACTIVE") {
-    const key = `halaqa-${halaqaId}`;
-    setBusyKey(key);
+    setBusyKey(`halaqa-${halaqaId}`);
     setNotice(null);
 
     try {
       const response = await fetch(`/api/manager/halaqat/${halaqaId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({
+          status: targetStatus,
+          effectiveOn: todayInputValue(),
+        }),
       });
+
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
+
       showResult("success", message);
       router.refresh();
     } catch (error) {
-      showResult("error", error instanceof Error ? error.message : "تعذر تحديث الحلقة.");
+      showResult("error", error instanceof Error ? error.message : "تعذر تغيير حالة الحلقة.");
     } finally {
       setBusyKey(null);
-    }
-  }
-
-  function requestHalaqaStatusToggle(halaqaId: string, status: "ACTIVE" | "INACTIVE", halaqaName: string) {
-    if (status === "INACTIVE") {
-      setConfirmState({
-        isOpen: true,
-        title: "تأكيد تعطيل الحلقة",
-        description: `هل أنت تأكيد على تعطيل حلقة (${halaqaName})؟ لن يتم تسجيل جلسات جديدة في هذه الحلقة حتى إعادة التفعيل.`,
-        confirmText: "تعطيل الحلقة",
-        variant: "warning",
-        onConfirm: async () => {
-          setConfirmLoading(true);
-          await updateHalaqaStatus(halaqaId, status);
-          setConfirmLoading(false);
-          setConfirmState(null);
-        },
-      });
-    } else {
-      void updateHalaqaStatus(halaqaId, status);
     }
   }
 
@@ -305,8 +208,7 @@ export function ManagementPanel({
       return;
     }
 
-    const key = `delete-halaqa-${halaqaId}`;
-    setBusyKey(key);
+    setBusyKey(`delete-halaqa-${halaqaId}`);
     setNotice(null);
 
     try {
@@ -349,6 +251,7 @@ export function ManagementPanel({
       const response = await fetch(`/api/manager/halaqat/${halaqaId}?force=true`, {
         method: "DELETE",
       });
+
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
 
@@ -362,15 +265,79 @@ export function ManagementPanel({
     }
   }
 
+  async function requestUserStatusToggle(
+    userId: string,
+    targetStatus: "ACTIVE" | "DISABLED",
+    displayName: string,
+  ) {
+    if (!confirm(targetStatus === "DISABLED" ? `هل أنت متأكد من إيقاف حساب (${displayName})؟` : `هل أنت متأكد من تفعيل حساب (${displayName})؟`)) {
+      return;
+    }
+
+    setBusyKey(`user-${userId}`);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/manager/users/${userId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: targetStatus,
+          effectiveOn: todayInputValue(),
+        }),
+      });
+
+      const message = await readApiMessage(response);
+      if (!response.ok) throw new Error(message);
+
+      showResult("success", message);
+      router.refresh();
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر تغيير حالة المستخدم.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function requestUserPermanentDelete(userId: string, displayName: string) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      showResult("error", "الحذف النهائي يحتاج اتصالاً بالإنترنت.");
+      return;
+    }
+
+    if (!confirm(`هل أنت متأكد من حذف المستخدم (${displayName}) نهائياً؟ هذا الإجراء غير قابل للتراجع عنه، وسيُنفذ فقط إذا كان المستخدم غير مرتبط بأي سجلات أو حلقات.`)) {
+      return;
+    }
+
+    setBusyKey(`delete-user-${userId}`);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/manager/users/${userId}`, {
+        method: "DELETE",
+      });
+
+      const message = await readApiMessage(response);
+      if (!response.ok) throw new Error(message);
+
+      showResult("success", message);
+      router.refresh();
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر حذف المستخدم.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" dir="rtl">
       {notice ? (
         <div
           role="status"
           className={`rounded-2xl border px-4 py-3 text-sm font-bold ${
             notice.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-              : "border-red-200 bg-red-50 text-red-800"
+              ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
+              : "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]"
           }`}
         >
           {notice.text}
@@ -384,7 +351,7 @@ export function ManagementPanel({
         <SummaryCard value={data.stats.totalUsers} label="مستخدم" />
       </div>
 
-      <div className="grid grid-cols-2 rounded-2xl border border-emerald-100 bg-white p-1 shadow-sm sm:grid-cols-4 lg:grid-cols-8">
+      <div className="grid grid-cols-2 rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)] p-1 shadow-sm sm:grid-cols-4 lg:grid-cols-8">
         <TabButton active={activeTab === "monitoring"} onClick={() => setActiveTab("monitoring")}>
           المتابعة
         </TabButton>
@@ -435,18 +402,18 @@ export function ManagementPanel({
       ) : activeTab === "audit" ? (
         <AuditLogPanel />
       ) : activeTab === "halaqat" ? (
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
-          <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] text-[var(--text-main)]">
+          <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5">
             <div className="mb-4">
-              <p className="text-xs font-bold text-emerald-700">إدارة الحلقات</p>
-              <h2 className="mt-1 text-xl font-black text-slate-950">إضافة حلقة جديدة</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
+              <p className="text-xs font-bold text-[var(--gold)]">إدارة الحلقات</p>
+              <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">إضافة حلقة جديدة</h2>
+              <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
                 يتم ربط الحلقة بالمرحلة والشيخ وأيام الدوام في عملية واحدة.
               </p>
             </div>
 
             {!activeTeachers.length ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">
+              <div className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-3 text-sm font-bold text-[var(--status-warning-text)]">
                 أضف مستخدماً بدور الشيخ أولاً قبل إنشاء الحلقة.
               </div>
             ) : null}
@@ -455,7 +422,7 @@ export function ManagementPanel({
               <div>
                 <label className="form-label" htmlFor="halaqa-name">اسم الحلقة</label>
                 <input
-                  className="form-control"
+                  className="form-control font-bold"
                   id="halaqa-name"
                   name="nameAr"
                   placeholder="مثال: حلقة أشبال 1"
@@ -466,7 +433,7 @@ export function ManagementPanel({
               <div>
                 <label className="form-label" htmlFor="halaqa-stage">المرحلة</label>
                 <select
-                  className="form-control"
+                  className="form-control font-bold"
                   id="halaqa-stage"
                   value={halaqaStageId}
                   onChange={(event) => handleStageChange(event.target.value)}
@@ -481,7 +448,7 @@ export function ManagementPanel({
               <div>
                 <label className="form-label" htmlFor="halaqa-teacher">الشيخ المسؤول</label>
                 <select
-                  className="form-control"
+                  className="form-control font-bold"
                   id="halaqa-teacher"
                   name="teacherUserId"
                   required
@@ -504,13 +471,13 @@ export function ManagementPanel({
                         key={weekday}
                         className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition ${
                           checked
-                            ? "border-emerald-700 bg-emerald-50 text-emerald-900"
-                            : "border-slate-200 bg-white text-slate-600"
+                            ? "border-[var(--primary)] bg-[var(--card-soft)] text-[var(--primary)]"
+                            : "border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-muted)]"
                         }`}
                       >
                         <input
                           type="checkbox"
-                          className="size-4 accent-emerald-700"
+                          className="size-4 accent-[var(--primary)]"
                           checked={checked}
                           onChange={() => toggleWeekday(weekday)}
                         />
@@ -524,7 +491,7 @@ export function ManagementPanel({
               <div>
                 <label className="form-label" htmlFor="halaqa-start">تاريخ بدء الجدول</label>
                 <input
-                  className="form-control"
+                  className="form-control font-bold"
                   id="halaqa-start"
                   name="effectiveFrom"
                   type="date"
@@ -536,7 +503,7 @@ export function ManagementPanel({
               <div>
                 <label className="form-label" htmlFor="halaqa-notes">ملاحظات</label>
                 <textarea
-                  className="form-control min-h-24 resize-y"
+                  className="form-control min-h-24 resize-y font-bold"
                   id="halaqa-notes"
                   name="notes"
                   placeholder="اختياري"
@@ -544,7 +511,7 @@ export function ManagementPanel({
               </div>
 
               <button
-                className="min-h-12 w-full rounded-2xl bg-emerald-800 px-4 font-black text-white transition hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60"
+                className="min-h-12 w-full rounded-2xl bg-[var(--primary)] px-4 font-black text-white transition hover:bg-[var(--primary-dark)] disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={busyKey !== null || !activeTeachers.length || !halaqaWeekdays.length}
               >
                 {busyKey === "create-halaqa" ? "جاري الإنشاء..." : "إنشاء الحلقة"}
@@ -555,27 +522,27 @@ export function ManagementPanel({
           <section className="space-y-3">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="text-xs font-bold text-emerald-700">الحلقات المسجلة</p>
-                <h2 className="mt-1 text-xl font-black text-slate-950">قائمة الحلقات</h2>
+                <p className="text-xs font-bold text-[var(--gold)]">الحلقات المسجلة</p>
+                <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">قائمة الحلقات</h2>
               </div>
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-900">
+              <span className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1 text-xs font-black text-[var(--primary)]">
                 {data.halaqat.length}
               </span>
             </div>
 
             {data.halaqat.length ? data.halaqat.map((halaqa) => (
-              <article key={halaqa.id} className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
+              <article key={halaqa.id} className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-black text-slate-950">{halaqa.nameAr}</h3>
+                      <h3 className="text-lg font-black text-[var(--text-main)]">{halaqa.nameAr}</h3>
                       <StatusBadge active={halaqa.status === "ACTIVE"} />
                     </div>
-                    <p className="mt-1 text-xs text-slate-400">{halaqa.code}</p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">{halaqa.code}</p>
                   </div>
-                  <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-center">
-                    <div className="text-lg font-black text-emerald-900">{halaqa.activeStudentsCount}</div>
-                    <div className="text-[10px] font-bold text-emerald-700">طالب نشط</div>
+                  <div className="rounded-2xl bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-2 text-center">
+                    <div className="text-lg font-black text-[var(--primary)]">{halaqa.activeStudentsCount}</div>
+                    <div className="text-[10px] font-bold text-[var(--text-muted)]">طالب نشط</div>
                   </div>
                 </div>
 
@@ -585,29 +552,29 @@ export function ManagementPanel({
                 </dl>
 
                 <div className="mt-4">
-                  <p className="text-xs font-extrabold text-slate-500">أيام الحلقة</p>
+                  <p className="text-xs font-extrabold text-[var(--text-muted)]">أيام الحلقة</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {halaqa.weekdays.map((weekday) => (
-                      <span key={weekday} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                      <span key={weekday} className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1 text-xs font-bold text-[var(--text-main)]">
                         {WEEKDAY_LABELS[weekday]}
                       </span>
                     ))}
                   </div>
                 </div>
 
-                {halaqa.notes ? <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{halaqa.notes}</p> : null}
+                {halaqa.notes ? <p className="mt-4 rounded-xl bg-[var(--card-soft)] border border-[var(--border-color)] p-3 text-sm leading-6 text-[var(--text-muted)]">{halaqa.notes}</p> : null}
 
                 {halaqa.status === "INACTIVE" ? (
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <button
-                      className="min-h-11 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60"
+                      className="min-h-11 rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-3 text-sm font-black text-[var(--status-success-text)] transition hover:opacity-90 disabled:opacity-60"
                       disabled={busyKey !== null}
                       onClick={() => requestHalaqaStatusToggle(halaqa.id, "ACTIVE", halaqa.nameAr)}
                     >
                       {busyKey === `halaqa-${halaqa.id}` ? "جاري التحديث..." : "إعادة تفعيل الحلقة"}
                     </button>
                     <button
-                      className="min-h-11 rounded-xl border border-red-200 bg-red-50 px-3 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                      className="min-h-11 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 text-sm font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:opacity-60"
                       disabled={busyKey !== null}
                       onClick={() => requestHalaqaPermanentDelete(halaqa.id, halaqa.nameAr)}
                     >
@@ -616,7 +583,7 @@ export function ManagementPanel({
                   </div>
                 ) : (
                   <button
-                    className="mt-4 min-h-11 w-full rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                    className="mt-4 min-h-11 w-full rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 text-sm font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:opacity-60"
                     disabled={busyKey !== null}
                     onClick={() => requestHalaqaStatusToggle(halaqa.id, "INACTIVE", halaqa.nameAr)}
                   >
@@ -632,27 +599,27 @@ export function ManagementPanel({
       ) : activeTab === "students" ? (
         <StudentManagementPanel students={data.students} halaqat={data.studentHalaqat} />
       ) : (
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
-          <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
-            <p className="text-xs font-bold text-emerald-700">إدارة المستخدمين</p>
-            <h2 className="mt-1 text-xl font-black text-slate-950">إضافة مستخدم</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-500">
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] text-[var(--text-main)]">
+          <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5">
+            <p className="text-xs font-bold text-[var(--gold)]">إدارة المستخدمين</p>
+            <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">إضافة مستخدم</h2>
+            <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
               كلمة الدخول تُشفّر في الخادم ولا تُعرض مرة أخرى بعد الحفظ.
             </p>
 
             <form className="mt-5 space-y-4" onSubmit={createUser}>
               <div>
                 <label className="form-label" htmlFor="display-name">الاسم الظاهر</label>
-                <input className="form-control" id="display-name" name="displayName" placeholder="مثال: الشيخ أحمد" required />
+                <input className="form-control font-bold" id="display-name" name="displayName" placeholder="مثال: الشيخ أحمد" required />
               </div>
               <div>
                 <label className="form-label" htmlFor="username">اسم المستخدم</label>
-                <input className="form-control" id="username" name="username" autoComplete="off" placeholder="ahmad" required />
+                <input className="form-control font-bold" id="username" name="username" autoComplete="off" placeholder="ahmad" required />
               </div>
               <div>
                 <label className="form-label" htmlFor="new-password">كلمة الدخول</label>
                 <input
-                  className="form-control"
+                  className="form-control font-bold"
                   id="new-password"
                   name="password"
                   type="password"
@@ -664,14 +631,14 @@ export function ManagementPanel({
               </div>
               <div>
                 <label className="form-label" htmlFor="user-role">الصلاحية</label>
-                <select className="form-control" id="user-role" name="role" defaultValue="TEACHER" required>
+                <select className="form-control font-bold" id="user-role" name="role" defaultValue="TEACHER" required>
                   {Object.entries(ROLE_LABELS).map(([code, label]) => (
                     <option key={code} value={code}>{label}</option>
                   ))}
                 </select>
               </div>
               <button
-                className="min-h-12 w-full rounded-2xl bg-emerald-800 px-4 font-black text-white transition hover:bg-emerald-900 disabled:opacity-60"
+                className="min-h-12 w-full rounded-2xl bg-[var(--primary)] px-4 font-black text-white transition hover:bg-[var(--primary-dark)] disabled:opacity-60"
                 disabled={busyKey !== null}
               >
                 {busyKey === "create-user" ? "جاري الإنشاء..." : "إنشاء المستخدم"}
@@ -682,39 +649,39 @@ export function ManagementPanel({
           <section className="space-y-3">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="text-xs font-bold text-emerald-700">الحسابات المسجلة</p>
-                <h2 className="mt-1 text-xl font-black text-slate-950">قائمة المستخدمين</h2>
+                <p className="text-xs font-bold text-[var(--gold)]">الحسابات المسجلة</p>
+                <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">قائمة المستخدمين</h2>
               </div>
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-900">{data.users.length}</span>
+              <span className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1 text-xs font-black text-[var(--primary)]">{data.users.length}</span>
             </div>
 
             {data.users.map((user) => (
-              <article key={user.id} className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
+              <article key={user.id} className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-black text-slate-950">{user.displayName}</h3>
+                      <h3 className="text-lg font-black text-[var(--text-main)]">{user.displayName}</h3>
                       <StatusBadge active={user.status === "ACTIVE"} label={user.status === "LOCKED" ? "موقوف مؤقتاً" : undefined} />
                     </div>
-                    <p className="mt-1 text-sm text-slate-500">@{user.username}</p>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">@{user.username}</p>
                   </div>
                   {user.isCurrentUser ? (
-                    <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black text-amber-900">حسابك</span>
+                    <span className="rounded-full bg-[var(--status-warning-bg)] border border-[var(--status-warning-border)] px-3 py-1 text-[10px] font-black text-[var(--status-warning-text)]">حسابك</span>
                   ) : null}
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   {user.roles.map((role) => (
-                    <span key={role.code} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
+                    <span key={role.code} className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1 text-xs font-bold text-[var(--primary)]">
                       {role.nameAr}
                     </span>
                   ))}
                 </div>
 
                 {user.activeHalaqat.length ? (
-                  <div className="mt-4 rounded-2xl bg-slate-50 p-3">
-                    <p className="text-xs font-extrabold text-slate-500">الحلقات المرتبطة</p>
-                    <p className="mt-1 text-sm font-bold leading-6 text-slate-700">
+                  <div className="mt-4 rounded-2xl bg-[var(--card-soft)] border border-[var(--border-color)] p-3">
+                    <p className="text-xs font-extrabold text-[var(--text-muted)]">الحلقات المرتبطة</p>
+                    <p className="mt-1 text-sm font-bold leading-6 text-[var(--text-main)]">
                       {user.activeHalaqat.map((halaqa) => halaqa.nameAr).join("، ")}
                     </p>
                   </div>
@@ -723,14 +690,14 @@ export function ManagementPanel({
                 {user.status === "DISABLED" && !user.isCurrentUser ? (
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <button
-                      className="min-h-11 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60"
+                      className="min-h-11 rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-3 text-sm font-black text-[var(--status-success-text)] transition hover:opacity-90 disabled:opacity-60"
                       disabled={busyKey !== null}
                       onClick={() => requestUserStatusToggle(user.id, "ACTIVE", user.displayName)}
                     >
                       {busyKey === `user-${user.id}` ? "جاري التحديث..." : "تفعيل المستخدم"}
                     </button>
                     <button
-                      className="min-h-11 rounded-xl border border-red-200 bg-red-50 px-3 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                      className="min-h-11 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 text-sm font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:opacity-60"
                       disabled={busyKey !== null}
                       onClick={() => requestUserPermanentDelete(user.id, user.displayName)}
                     >
@@ -739,7 +706,7 @@ export function ManagementPanel({
                   </div>
                 ) : (
                   <button
-                    className="mt-4 min-h-11 w-full rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="mt-4 min-h-11 w-full rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 text-sm font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={busyKey !== null || user.isCurrentUser}
                     onClick={() => requestUserStatusToggle(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE", user.displayName)}
                   >
@@ -759,18 +726,18 @@ export function ManagementPanel({
       )}
 
       {halaqaDeleteModal && halaqaDeleteModal.isOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs" dir="rtl">
-          <div className="w-full max-w-lg space-y-4 rounded-3xl border border-red-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-center gap-3 text-red-700">
-              <div className="flex size-10 items-center justify-center rounded-2xl bg-red-100 text-xl font-black">⚠️</div>
-              <h3 className="text-lg font-black text-slate-950">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs" dir="rtl">
+          <div className="w-full max-w-lg space-y-4 rounded-3xl border border-[var(--status-danger-border)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)]">
+            <div className="flex items-center gap-3 text-[var(--status-danger-text)]">
+              <div className="flex size-10 items-center justify-center rounded-2xl bg-[var(--status-danger-bg)] border border-[var(--status-danger-border)] text-xl font-black">⚠️</div>
+              <h3 className="text-lg font-black text-[var(--text-main)]">
                 {halaqaDeleteModal.hasLinkedData ? "تأكيد الحذف النهائي لحلقة تحتوي على بيانات" : "حذف الحلقة نهائياً"}
               </h3>
             </div>
 
             {halaqaDeleteModal.hasLinkedData ? (
-              <div className="space-y-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-bold leading-6 text-red-900">
-                <p className="text-sm font-black text-red-950">هذه الحلقة تحتوي على بيانات مرتبطة. حذفها سيؤدي إلى حذف:</p>
+              <div className="space-y-2 rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-4 text-xs font-bold leading-6 text-[var(--status-danger-text)]">
+                <p className="text-sm font-black text-[var(--status-danger-text)]">هذه الحلقة تحتوي على بيانات مرتبطة. حذفها سيؤدي إلى حذف:</p>
                 <ul className="list-inside list-disc space-y-1">
                   <li>تسجيلات الطلاب المرتبطة بالحلقة ({halaqaDeleteModal.counts.enrollments} طالب/تسجيل)</li>
                   <li>جلسات التسميع ({halaqaDeleteModal.counts.sessions} جلسة)</li>
@@ -778,22 +745,22 @@ export function ManagementPanel({
                   <li>الاختبارات الرسمية المرتبطة ({halaqaDeleteModal.counts.exams} اختبار)</li>
                   <li>أي بيانات تشغيلية مرتبطة بهذه الحلقة</li>
                 </ul>
-                <p className="pt-1 font-black text-red-700">لا يمكن التراجع عن هذه العملية.</p>
+                <p className="pt-1 font-black text-[var(--status-danger-text)]">لا يمكن التراجع عن هذه العملية.</p>
               </div>
             ) : (
-              <p className="text-sm font-bold text-slate-600">
+              <p className="text-sm font-bold text-[var(--text-muted)]">
                 هل أنت متأكد من حذف حلقة ({halaqaDeleteModal.halaqaName}) نهائياً؟ لا تحتوي الحلقة على أي بيانات مرتبطة.
               </p>
             )}
 
             {halaqaDeleteModal.hasLinkedData ? (
               <div className="space-y-2">
-                <label className="block text-xs font-extrabold text-slate-700" htmlFor="halaqa-confirm-input">
-                  اكتب اسم الحلقة لتأكيد الحذف النهائي: <span className="font-black text-red-700">({halaqaDeleteModal.halaqaName})</span>
+                <label className="block text-xs font-extrabold text-[var(--text-main)]" htmlFor="halaqa-confirm-input">
+                  اكتب اسم الحلقة لتأكيد الحذف النهائي: <span className="font-black text-[var(--status-danger-text)]">({halaqaDeleteModal.halaqaName})</span>
                 </label>
                 <input
                   id="halaqa-confirm-input"
-                  className="form-control border-red-300 text-sm font-bold focus:border-red-600 focus:ring-red-200"
+                  className="form-control text-sm font-bold"
                   placeholder="اكتب اسم الحلقة هنا للتأكيد..."
                   value={halaqaDeleteModal.typedName}
                   onChange={(e) =>
@@ -806,7 +773,7 @@ export function ManagementPanel({
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
-                className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                className="min-h-11 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-sm font-bold text-[var(--text-main)] hover:border-[var(--primary)]"
                 onClick={() => setHalaqaDeleteModal(null)}
                 disabled={halaqaDeleteModal.loading}
               >
@@ -815,7 +782,7 @@ export function ManagementPanel({
 
               <button
                 type="button"
-                className="min-h-11 rounded-xl bg-red-700 px-5 text-sm font-black text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-11 rounded-xl bg-[var(--status-danger-text)] px-5 text-sm font-black text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={
                   halaqaDeleteModal.loading ||
                   (halaqaDeleteModal.hasLinkedData &&
@@ -826,24 +793,11 @@ export function ManagementPanel({
                   await executeHalaqaPermanentDelete(halaqaDeleteModal.halaqaId);
                 }}
               >
-                {halaqaDeleteModal.loading ? "جاري الحذف..." : "حذف نهائي للمحتوى والحلقة"}
+                {halaqaDeleteModal.loading ? "جاري الحذف..." : "حذف نهائي للحلقة والبيانات"}
               </button>
             </div>
           </div>
         </div>
-      ) : null}
-
-      {confirmState ? (
-        <ConfirmDialog
-          isOpen={confirmState.isOpen}
-          title={confirmState.title}
-          description={confirmState.description}
-          confirmText={confirmState.confirmText}
-          variant={confirmState.variant}
-          loading={confirmLoading}
-          onConfirm={confirmState.onConfirm}
-          onClose={() => setConfirmState(null)}
-        />
       ) : null}
     </div>
   );
@@ -851,9 +805,9 @@ export function ManagementPanel({
 
 function SummaryCard({ value, label }: { value: number; label: string }) {
   return (
-    <article className="rounded-2xl border border-emerald-100 bg-white p-3 text-center shadow-sm sm:p-4">
-      <div className="text-2xl font-black text-emerald-900 sm:text-3xl">{value}</div>
-      <div className="mt-1 text-[11px] font-bold text-slate-500 sm:text-xs">{label}</div>
+    <article className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)] p-3 text-center shadow-sm sm:p-4 transition hover:border-[var(--primary)] text-[var(--text-main)]">
+      <div className="text-2xl font-black text-[var(--primary)] sm:text-3xl">{value}</div>
+      <div className="mt-1 text-[11px] font-bold text-[var(--text-muted)] sm:text-xs">{label}</div>
     </article>
   );
 }
@@ -862,7 +816,9 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       className={`min-h-11 rounded-xl px-4 text-sm font-black transition ${
-        active ? "bg-emerald-800 text-white shadow-sm" : "text-slate-600 hover:bg-emerald-50"
+        active
+          ? "bg-[var(--primary)] text-white shadow-sm"
+          : "text-[var(--text-muted)] hover:bg-[var(--card-soft)] hover:text-[var(--text-main)]"
       }`}
       onClick={onClick}
       type="button"
@@ -874,7 +830,13 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 function StatusBadge({ active, label }: { active: boolean; label?: string }) {
   return (
-    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${active ? "bg-emerald-100 text-emerald-900" : "bg-slate-200 text-slate-700"}`}>
+    <span
+      className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${
+        active
+          ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
+          : "border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-muted)]"
+      }`}
+    >
       {label || (active ? "نشط" : "متوقف")}
     </span>
   );
@@ -882,16 +844,16 @@ function StatusBadge({ active, label }: { active: boolean; label?: string }) {
 
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-3">
-      <dt className="text-[11px] font-extrabold text-slate-500">{label}</dt>
-      <dd className="mt-1 font-black text-slate-800">{value}</dd>
+    <div className="rounded-2xl bg-[var(--card-soft)] border border-[var(--border-color)] p-3">
+      <dt className="text-[11px] font-extrabold text-[var(--text-muted)]">{label}</dt>
+      <dd className="mt-1 font-black text-[var(--text-main)]">{value}</dd>
     </div>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm font-bold text-slate-500">
+    <div className="rounded-3xl border border-dashed border-[var(--border-color)] bg-[var(--card-bg)] p-8 text-center text-sm font-bold text-[var(--text-muted)]">
       {text}
     </div>
   );

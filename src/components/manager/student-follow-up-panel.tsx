@@ -13,9 +13,9 @@ import { ParentReportModal } from "@/components/reports/parent-report-modal";
 import type { ParentReportData } from "@/lib/reports/parent-report-types";
 
 const SEVERITY_STYLES: Record<FollowUpSeverity, string> = {
-  HIGH: "border-red-200 bg-red-50 text-red-800",
-  MEDIUM: "border-amber-200 bg-amber-50 text-amber-900",
-  LOW: "border-blue-200 bg-blue-50 text-blue-800",
+  HIGH: "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]",
+  MEDIUM: "border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]",
+  LOW: "border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--status-info-text)]",
 };
 
 function subtractDays(value: string, days: number): string {
@@ -116,26 +116,26 @@ export function StudentFollowUpPanel({
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
-        <p className="text-xs font-bold text-emerald-700">تحليل الحضور والإنجاز</p>
-        <h2 className="mt-1 text-xl font-black text-slate-950">طلاب يحتاجون متابعة</h2>
-        <p className="mt-1 text-sm leading-6 text-slate-500">
+    <div className="space-y-5" dir="rtl">
+      <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
+        <p className="text-xs font-bold text-[var(--gold)]">تحليل الحضور والإنجاز</p>
+        <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">طلاب يحتاجون متابعة</h2>
+        <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
           يعتمد التحليل على الغياب المتكرر، الغياب المتتالي، «لم يسمع»، انخفاض الحضور، والحضور دون إنجاز مسجل.
         </p>
 
         <form className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3" onSubmit={load}>
           <div>
             <label className="form-label" htmlFor="follow-from">من تاريخ</label>
-            <input id="follow-from" className="form-control" type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
+            <input id="follow-from" className="form-control font-bold" type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
           </div>
           <div>
             <label className="form-label" htmlFor="follow-to">إلى تاريخ</label>
-            <input id="follow-to" className="form-control" type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
+            <input id="follow-to" className="form-control font-bold" type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
           </div>
           <div>
             <label className="form-label" htmlFor="follow-threshold">حد نسبة الحضور</label>
-            <select id="follow-threshold" className="form-control" value={attendanceThreshold} onChange={(event) => setAttendanceThreshold(Number(event.target.value))}>
+            <select id="follow-threshold" className="form-control font-bold" value={attendanceThreshold} onChange={(event) => setAttendanceThreshold(Number(event.target.value))}>
               <option value={60}>أقل من 60%</option>
               <option value={70}>أقل من 70%</option>
               <option value={80}>أقل من 80%</option>
@@ -144,21 +144,21 @@ export function StudentFollowUpPanel({
           </div>
           <div>
             <label className="form-label" htmlFor="follow-stage">المرحلة</label>
-            <select id="follow-stage" className="form-control" value={stageId} onChange={(event) => changeStage(event.target.value)}>
+            <select id="follow-stage" className="form-control font-bold" value={stageId} onChange={(event) => changeStage(event.target.value)}>
               <option value="">كل المراحل</option>
               {stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.nameAr}</option>)}
             </select>
           </div>
           <div>
             <label className="form-label" htmlFor="follow-halaqa">الحلقة</label>
-            <select id="follow-halaqa" className="form-control" value={halaqaId} onChange={(event) => setHalaqaId(event.target.value)}>
+            <select id="follow-halaqa" className="form-control font-bold" value={halaqaId} onChange={(event) => setHalaqaId(event.target.value)}>
               <option value="">كل الحلقات</option>
               {visibleHalaqatList.map((halaqa) => <option key={halaqa.id} value={halaqa.id}>{halaqa.nameAr}</option>)}
             </select>
           </div>
-          <button className="min-h-12 self-end rounded-2xl bg-emerald-800 px-5 text-sm font-black text-white hover:bg-emerald-900 disabled:opacity-60" disabled={loading}>{loading ? "جاري التحليل..." : "تحليل الفترة"}</button>
+          <button className="min-h-12 self-end rounded-2xl bg-[var(--primary)] px-5 text-sm font-black text-white hover:bg-[var(--primary-dark)] transition disabled:opacity-60" disabled={loading}>{loading ? "جاري التحليل..." : "تحليل الفترة"}</button>
         </form>
-        {error ? <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">{error}</div> : null}
+        {error ? <div className="mt-3 rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-3 text-sm font-bold text-[var(--status-danger-text)]">{error}</div> : null}
       </section>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -170,30 +170,30 @@ export function StudentFollowUpPanel({
 
       <section className="space-y-3">
         {loading && !data ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-500">جاري تحليل بيانات الطلاب...</div>
+          <div className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-8 text-center text-sm font-bold text-[var(--text-muted)]">جاري تحليل بيانات الطلاب...</div>
         ) : data?.students.length ? data.students.map((student) => {
           const severity = highestSeverity(student.reasons);
           return (
-            <article key={student.studentId} className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
+            <article key={student.studentId} className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-black text-slate-950">{student.displayName}</h3>
+                    <h3 className="text-lg font-black text-[var(--text-main)]">{student.displayName}</h3>
                     <span className={`rounded-full border px-3 py-1 text-[10px] font-black ${SEVERITY_STYLES[severity]}`}>{severity === "HIGH" ? "أولوية عالية" : severity === "MEDIUM" ? "أولوية متوسطة" : "أولوية منخفضة"}</span>
                   </div>
-                  <p className="mt-1 text-sm text-slate-500">{student.currentHalaqa ? `${student.currentHalaqa.stageName} — ${student.currentHalaqa.nameAr}` : "لا يوجد تسجيل مرتبط ضمن الفترة"}</p>
-                  {student.parentPhone ? <p className="mt-1 text-xs font-bold text-slate-500" dir="ltr">{student.parentPhone}</p> : null}
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">{student.currentHalaqa ? `${student.currentHalaqa.stageName} — ${student.currentHalaqa.nameAr}` : "لا يوجد تسجيل مرتبط ضمن الفترة"}</p>
+                  {student.parentPhone ? <p className="mt-1 text-xs font-bold text-[var(--text-muted)]" dir="ltr">{student.parentPhone}</p> : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     disabled={fetchingReportId === student.studentId}
                     onClick={() => openParentReport(student.studentId)}
-                    className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-950 transition hover:bg-emerald-100 disabled:opacity-50"
+                    className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-3 py-2 text-xs font-black text-[var(--primary)] transition hover:bg-[var(--primary)] hover:text-white disabled:opacity-50"
                   >
                     {fetchingReportId === student.studentId ? "جاري..." : "📜 تقرير ولي الأمر"}
                   </button>
-                  <a href={`/manager/students/${student.studentId}`} className="rounded-xl bg-emerald-900 px-4 py-2 text-xs font-black text-white hover:bg-emerald-950">فتح ملف الطالب</a>
+                  <a href={`/manager/students/${student.studentId}`} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-xs font-black text-white hover:bg-[var(--primary-dark)]">فتح ملف الطالب</a>
                 </div>
               </div>
 
@@ -212,15 +212,15 @@ export function StudentFollowUpPanel({
                 ))}
               </div>
 
-              <div className="mt-4 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
-                <p className="rounded-xl bg-slate-50 p-3">غياب متتالٍ: <strong>{student.metrics.consecutiveAbsences}</strong></p>
-                <p className="rounded-xl bg-slate-50 p-3">حضور دون صفحات: <strong>{student.metrics.zeroPagePresentSessions}</strong></p>
-                <p className="rounded-xl bg-slate-50 p-3">آخر سجل: <strong>{student.metrics.lastRecordDate ?? "—"}</strong></p>
+              <div className="mt-4 grid gap-2 text-xs text-[var(--text-muted)] sm:grid-cols-3">
+                <p className="rounded-xl bg-[var(--card-soft)] border border-[var(--border-color)] p-3">غياب متتالٍ: <strong className="text-[var(--text-main)]">{student.metrics.consecutiveAbsences}</strong></p>
+                <p className="rounded-xl bg-[var(--card-soft)] border border-[var(--border-color)] p-3">حضور دون صفحات: <strong className="text-[var(--text-main)]">{student.metrics.zeroPagePresentSessions}</strong></p>
+                <p className="rounded-xl bg-[var(--card-soft)] border border-[var(--border-color)] p-3">آخر سجل: <strong className="text-[var(--text-main)]">{student.metrics.lastRecordDate ?? "—"}</strong></p>
               </div>
             </article>
           );
         }) : (
-          <div className="rounded-3xl border border-dashed border-emerald-300 bg-emerald-50 p-8 text-center text-sm font-black text-emerald-900">لا يوجد طلاب تنطبق عليهم قواعد المتابعة في الفترة المحددة.</div>
+          <div className="rounded-3xl border border-dashed border-[var(--status-success-border)] bg-[var(--status-success-bg)] p-8 text-center text-sm font-black text-[var(--status-success-text)]">لا يوجد طلاب تنطبق عليهم قواعد المتابعة في الفترة المحددة.</div>
         )}
       </section>
 
@@ -232,9 +232,19 @@ export function StudentFollowUpPanel({
 }
 
 function Metric({ value, label, danger, warning }: { value: number; label: string; danger?: boolean; warning?: boolean }) {
-  return <article className={`rounded-2xl border p-4 text-center shadow-sm ${danger ? "border-red-200 bg-red-50" : warning ? "border-amber-200 bg-amber-50" : "border-emerald-100 bg-white"}`}><div className={`text-2xl font-black ${danger ? "text-red-800" : warning ? "text-amber-900" : "text-emerald-900"}`}>{value}</div><div className="mt-1 text-xs font-bold text-slate-500">{label}</div></article>;
+  return (
+    <article className={`rounded-2xl border p-4 text-center shadow-sm ${danger ? "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]" : warning ? "border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]" : "border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-main)]"}`}>
+      <div className={`text-2xl font-black ${danger ? "text-[var(--status-danger-text)]" : warning ? "text-[var(--status-warning-text)]" : "text-[var(--primary)]"}`}>{value}</div>
+      <div className="mt-1 text-xs font-bold opacity-80">{label}</div>
+    </article>
+  );
 }
 
 function Info({ label, value, danger }: { label: string; value: number | string; danger?: boolean }) {
-  return <div className={`rounded-xl p-3 text-center ${danger ? "bg-red-50" : "bg-slate-50"}`}><dt className="text-[10px] font-bold text-slate-500">{label}</dt><dd className={`mt-1 font-black ${danger ? "text-red-800" : "text-slate-800"}`}>{value}</dd></div>;
+  return (
+    <div className={`rounded-xl p-3 text-center border border-[var(--border-color)] ${danger ? "bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]" : "bg-[var(--card-soft)] text-[var(--text-main)]"}`}>
+      <dt className="text-[10px] font-bold opacity-75">{label}</dt>
+      <dd className={`mt-1 font-black ${danger ? "text-[var(--status-danger-text)]" : "text-[var(--text-main)]"}`}>{value}</dd>
+    </div>
+  );
 }
