@@ -276,7 +276,7 @@ export function StudentManagementPanel({
         </div>
       ) : null}
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.45fr)]">
+      <div className="bg-[var(--card-bg)] grid items-start gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.45fr)]">
         <section className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
           <p className="text-xs font-bold text-emerald-700">ملفات الطلاب</p>
           <h2 className="mt-1 text-xl font-black text-slate-950">إضافة طالب وتسجيله</h2>
@@ -396,7 +396,7 @@ export function StudentManagementPanel({
         </section>
 
         <section className="space-y-4">
-          <div className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
+          <div className="bg-[var(--card-bg)] rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-xs font-bold text-emerald-700">الطلاب المسجلون</p>
@@ -407,7 +407,7 @@ export function StudentManagementPanel({
               </span>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="bg-[var(--card-bg)] mt-4 grid gap-3 sm:grid-cols-3">
               <input
                 className="form-control sm:col-span-1"
                 value={query}
