@@ -1,4 +1,4 @@
-const CACHE_NAME = "qcm-pwa-v5";
+const CACHE_NAME = "qcm-pwa-v7";
 const STATIC_ASSETS = [
   "/",
   "/login",
@@ -97,22 +97,25 @@ const OFFLINE_RESTRICTED_HTML = `
 </html>
 `;
 
-function isCacheable(request, response, url) {
+function canCacheRequest(request, response) {
   if (!request || request.method !== "GET") return false;
-  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-  if (url.origin !== self.location.origin) return false;
-  if (!response || response.status !== 200) return false;
+  try {
+    const url = new URL(request.url);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    if (url.origin !== self.location.origin) return false;
+  } catch {
+    return false;
+  }
+  if (!response || !response.ok) return false;
   if (response.type !== "basic" && response.type !== "cors") return false;
   return true;
 }
 
-async function safeCachePut(request, response) {
+async function safeCachePut(request, responseClone) {
   try {
-    const url = new URL(request.url);
-    if (!isCacheable(request, response, url)) return;
-
+    if (!canCacheRequest(request, responseClone)) return;
     const cache = await caches.open(CACHE_NAME);
-    await cache.put(request, response.clone());
+    await cache.put(request, responseClone);
   } catch (error) {
     console.warn("SW cache put skipped:", request.url, error);
   }
@@ -147,9 +150,14 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  const url = new URL(request.url);
+  let url;
+  try {
+    url = new URL(request.url);
+  } catch {
+    return;
+  }
 
-  // Early filter: skip unsupported protocols (chrome-extension://, moz-extension://, devtools://, data:, blob:, etc.)
+  // Early filter: skip unsupported protocols
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return;
   }
@@ -162,63 +170,86 @@ self.addEventListener("fetch", (event) => {
   // Strategy for Next.js Static JS/CSS Chunks: Network-First to avoid stale assets
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            safeCachePut(request, networkResponse);
+      (async () => {
+        try {
+          const networkResponse = await fetch(request);
+          if (networkResponse && networkResponse.ok) {
+            safeCachePut(request, networkResponse.clone());
           }
           return networkResponse;
-        })
-        .catch(() => caches.match(request))
+        } catch {
+          const cachedResponse = await caches.match(request);
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          return new Response("Network Error", {
+            status: 408,
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          });
+        }
+      })()
     );
     return;
   }
 
   // Strategy for static shell pages & public assets
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Refresh cache in background when online
-        fetch(request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              safeCachePut(request, networkResponse);
-            }
-          })
-          .catch(() => {});
-        return cachedResponse;
-      }
+    (async () => {
+      try {
+        const cachedResponse = await caches.match(request);
+        if (cachedResponse) {
+          // Refresh cache in background when online (fire-and-forget safely)
+          fetch(request)
+            .then((networkResponse) => {
+              if (networkResponse && networkResponse.ok) {
+                safeCachePut(request, networkResponse.clone());
+              }
+            })
+            .catch(() => {});
+          return cachedResponse;
+        }
 
-      return fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            safeCachePut(request, networkResponse);
+        const networkResponse = await fetch(request);
+        if (networkResponse && networkResponse.ok) {
+          safeCachePut(request, networkResponse.clone());
+        }
+        return networkResponse;
+      } catch {
+        // Navigation Fallback when offline
+        if (request.mode === "navigate") {
+          if (url.pathname.startsWith("/teacher")) {
+            const fallback = (await caches.match("/teacher")) || (await caches.match("/"));
+            if (fallback) return fallback;
           }
-          return networkResponse;
-        })
-        .catch(() => {
-          // Navigation Fallback when offline
-          if (request.mode === "navigate") {
-            if (url.pathname.startsWith("/teacher")) {
-              return caches.match("/teacher") || caches.match("/");
-            }
-            if (url.pathname.startsWith("/examiner")) {
-              return caches.match("/examiner") || caches.match("/");
-            }
-            if (url.pathname.startsWith("/login")) {
-              return caches.match("/login") || caches.match("/");
-            }
-            if (url.pathname.startsWith("/manager")) {
-              return caches.match(request).then((cached) => {
-                if (cached) return cached;
-                return new Response(OFFLINE_RESTRICTED_HTML, {
-                  headers: { "Content-Type": "text/html; charset=utf-8" },
-                });
-              });
-            }
-            return caches.match("/teacher") || caches.match("/examiner") || caches.match("/login");
+          if (url.pathname.startsWith("/examiner")) {
+            const fallback = (await caches.match("/examiner")) || (await caches.match("/"));
+            if (fallback) return fallback;
           }
+          if (url.pathname.startsWith("/login")) {
+            const fallback = (await caches.match("/login")) || (await caches.match("/"));
+            if (fallback) return fallback;
+          }
+          if (url.pathname.startsWith("/manager")) {
+            return new Response(OFFLINE_RESTRICTED_HTML, {
+              headers: { "Content-Type": "text/html; charset=utf-8" },
+            });
+          }
+          const generalFallback =
+            (await caches.match("/teacher")) ||
+            (await caches.match("/examiner")) ||
+            (await caches.match("/login"));
+          if (generalFallback) return generalFallback;
+
+          return new Response(OFFLINE_RESTRICTED_HTML, {
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+          });
+        }
+
+        return new Response("Service Unavailable", {
+          status: 503,
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
         });
-    })
+      }
+    })()
   );
 });
