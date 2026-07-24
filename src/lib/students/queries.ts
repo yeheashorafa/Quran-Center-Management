@@ -40,6 +40,8 @@ export async function getManagerStudentsData(): Promise<{
         displayName: true,
         parentPhone: true,
         gradeLevel: true,
+        memorizationStartedOn: true,
+        notes: true,
         isActive: true,
         enrollments: {
           where: { status: "ACTIVE", endedOn: null, deletedAt: null },
@@ -94,6 +96,8 @@ export async function getManagerStudentsData(): Promise<{
         displayName: student.displayName,
         parentPhone: student.parentPhone,
         gradeLevel: student.gradeLevel,
+        memorizationStartedOn: dateInputValue(student.memorizationStartedOn),
+        notes: student.notes,
         isActive: student.isActive,
         activeEnrollment: enrollment
           ? {

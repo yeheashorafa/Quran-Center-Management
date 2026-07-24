@@ -13,6 +13,8 @@ export type TeacherStudentItem = {
   halaqaName: string;
   stageName: string;
   memorizationStartedOn: string | null;
+  notes?: string | null;
+  isActive?: boolean;
 };
 
 export function TeacherStudentsPanel({
@@ -92,6 +94,8 @@ export function TeacherStudentsPanel({
           parentPhone: formData.get("parentPhone"),
           gradeLevel: formData.get("gradeLevel"),
           memorizationStartedOn: formData.get("memorizationStartedOn"),
+          notes: formData.get("notes"),
+          isActive: formData.get("isActive") === "true",
         }),
       });
 
@@ -105,6 +109,70 @@ export function TeacherStudentsPanel({
       onRefresh();
     } catch (err) {
       setNotice({ type: "error", text: err instanceof Error ? err.message : "حدث خطأ أثناء التحديث." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemoveFromHalaqa(studentId: string, displayName: string) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setNotice({ type: "error", text: "إزالة الطالب تحتاج اتصالاً بالإنترنت." });
+      return;
+    }
+
+    if (!confirm(`هل أنت متأكد من إزالة الطالب (${displayName}) من الحلقة؟ سيتم إنهاء تسجيله الحالي مع الحفاظ على سجلاته التاريخية.`)) {
+      return;
+    }
+
+    setBusy(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch(
+        `/api/teacher/students?studentId=${studentId}&halaqaId=${halaqaId}&action=remove`,
+        { method: "DELETE" },
+      );
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(json.message || "تعذر إزالة الطالب من الحلقة.");
+      }
+
+      setNotice({ type: "success", text: json.message || "تمت إزالة الطالب من الحلقة بنجاح." });
+      onRefresh();
+    } catch (err) {
+      setNotice({ type: "error", text: err instanceof Error ? err.message : "حدث خطأ أثناء الإزالة." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteTestStudent(studentId: string, displayName: string) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setNotice({ type: "error", text: "حذف الطالب يحتاج اتصالاً بالإنترنت." });
+      return;
+    }
+
+    if (!confirm(`هل أنت متأكد من حذف الطالب التجريبي (${displayName}) نهائياً؟ هذا المطبّق يعمل فقط للطلاب الذين ليس لديهم سجلات تسميع أو اختبارات.`)) {
+      return;
+    }
+
+    setBusy(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch(
+        `/api/teacher/students?studentId=${studentId}&halaqaId=${halaqaId}&action=delete`,
+        { method: "DELETE" },
+      );
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(json.message || "تعذر حذف الطالب.");
+      }
+
+      setNotice({ type: "success", text: json.message || "تم حذف الطالب التجريبي بنجاح." });
+      onRefresh();
+    } catch (err) {
+      setNotice({ type: "error", text: err instanceof Error ? err.message : "حدث خطأ أثناء الحذف." });
     } finally {
       setBusy(false);
     }
@@ -133,7 +201,7 @@ export function TeacherStudentsPanel({
             <span className="text-xs font-bold text-[var(--gold)]">إدارة طلاب الحلقة</span>
             <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">قائمة الطلاب المباشرة</h2>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
-              يمكنك إضافة طلاب جديدين، وتعديل كافة بياناتهم، واستخراج تقارير ولي الأمر.
+              يمكنك إضافة طلاب جديدين، وتعديل كافة بياناتهم، وإزالتهم من الحلقة، واستخراج تقارير ولي الأمر.
             </p>
           </div>
           <button
@@ -194,25 +262,52 @@ export function TeacherStudentsPanel({
                     <span>هاتف ولي الأمر:</span>
                     <span className="text-[var(--text-main)]" dir="ltr">{student.parentPhone || "غير مسجل"}</span>
                   </div>
+                  {student.notes ? (
+                    <div className="mt-2 rounded-xl bg-[var(--card-soft)] p-2 text-[11px] font-normal leading-5 text-[var(--text-muted)]">
+                      📝 {student.notes}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
-              <div className="mt-5 border-t border-[var(--border-color)] pt-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingStudent(student)}
-                  className="min-h-10 rounded-xl bg-[var(--card-soft)] text-[var(--text-main)] font-bold text-xs border border-[var(--border-color)] px-3 hover:border-[var(--primary)] transition"
-                >
-                  ✏️ تعديل
-                </button>
-                <button
-                  type="button"
-                  disabled={fetchingReportId === student.studentId}
-                  onClick={() => openReport(student.studentId)}
-                  className="flex-1 min-h-10 rounded-xl bg-[var(--card-soft)] text-[var(--primary)] font-black text-xs border border-[var(--border-color)] transition hover:bg-[var(--primary)] hover:text-white disabled:opacity-50"
-                >
-                  {fetchingReportId === student.studentId ? "جاري الاستخراج..." : "📜 تقرير ولي الأمر"}
-                </button>
+              <div className="mt-5 border-t border-[var(--border-color)] pt-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingStudent(student)}
+                    className="flex-1 min-h-10 rounded-xl bg-[var(--card-soft)] text-[var(--text-main)] font-bold text-xs border border-[var(--border-color)] px-3 hover:border-[var(--primary)] transition"
+                  >
+                    ✏️ تعديل
+                  </button>
+                  <button
+                    type="button"
+                    disabled={fetchingReportId === student.studentId}
+                    onClick={() => openReport(student.studentId)}
+                    className="flex-1 min-h-10 rounded-xl bg-[var(--card-soft)] text-[var(--primary)] font-black text-xs border border-[var(--border-color)] transition hover:bg-[var(--primary)] hover:text-white disabled:opacity-50"
+                  >
+                    {fetchingReportId === student.studentId ? "جاري..." : "📜 تقرير ولي الأمر"}
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => handleRemoveFromHalaqa(student.studentId, student.displayName)}
+                    className="flex-1 min-h-9 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 font-extrabold text-[11px] hover:bg-amber-100 transition disabled:opacity-50"
+                  >
+                    🚫 إزالة من الحلقة
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => handleDeleteTestStudent(student.studentId, student.displayName)}
+                    className="min-h-9 rounded-xl border border-red-200 bg-red-50 text-red-700 font-extrabold text-[11px] px-3 hover:bg-red-100 transition disabled:opacity-50"
+                    title="حذف طالب تجريبي لا يحتوي على أي سجلات"
+                  >
+                    🗑️ حذف تجريبي
+                  </button>
+                </div>
               </div>
             </article>
           ))
@@ -282,7 +377,7 @@ export function TeacherStudentsPanel({
           <div className="w-full max-w-md rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)]">
             <h3 className="text-lg font-black text-[var(--text-main)]">تعديل بيانات الطالب</h3>
             <p className="mt-1 text-xs font-bold text-[var(--text-muted)]">
-              تعديل بيانات الطالب المعروضة بالمركز.
+              تعديل البيانات الأساسية للطالب في الحلقة.
             </p>
 
             <form className="mt-5 space-y-4" onSubmit={handleEditStudent}>
@@ -331,6 +426,26 @@ export function TeacherStudentsPanel({
                   defaultValue={editingStudent.memorizationStartedOn ? editingStudent.memorizationStartedOn.slice(0, 10) : ""}
                   className="form-control font-bold"
                 />
+              </div>
+              <div>
+                <label className="form-label">ملاحظات الطالب</label>
+                <textarea
+                  name="notes"
+                  defaultValue={editingStudent.notes || ""}
+                  placeholder="ملاحظات حول سلوك أو أداء الطالب"
+                  className="form-control min-h-20 font-bold"
+                />
+              </div>
+              <div>
+                <label className="form-label">حالة الطالب داخل الحلقة</label>
+                <select
+                  name="isActive"
+                  defaultValue={editingStudent.isActive === false ? "false" : "true"}
+                  className="form-control font-bold"
+                >
+                  <option value="true">نشط</option>
+                  <option value="false">غير نشط (معطل)</option>
+                </select>
               </div>
 
               <div className="mt-6 flex items-center justify-end gap-3 border-t border-[var(--border-color)] pt-4">

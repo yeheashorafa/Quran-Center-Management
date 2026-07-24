@@ -9,6 +9,20 @@ type ApiMessage = { message?: string };
 
 type Notice = { type: "success" | "error"; text: string } | null;
 
+type StudentDeleteModalState = {
+  isOpen: boolean;
+  studentId: string;
+  studentName: string;
+  counts: {
+    enrollments: number;
+    sessions: number;
+    exams: number;
+  };
+  hasLinkedData: boolean;
+  typedName: string;
+  loading: boolean;
+};
+
 function todayInputValue(): string {
   const date = new Date();
   const year = date.getFullYear();
@@ -30,11 +44,14 @@ export function StudentManagementPanel({
   halaqat: StudentHalaqaOption[];
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [query, setQuery] = useState("");
   const [halaqaFilter, setHalaqaFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+
+  const [editingStudent, setEditingStudent] = useState<ManagerStudentItem | null>(null);
+  const [studentDeleteModal, setStudentDeleteModal] = useState<StudentDeleteModalState | null>(null);
 
   const filteredStudents = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ar");
@@ -53,11 +70,16 @@ export function StudentManagementPanel({
     });
   }, [halaqaFilter, query, statusFilter, students]);
 
+  function showResult(type: "success" | "error", text: string) {
+    setNotice({ type, text });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function createStudent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
-    setBusy(true);
+    setBusyKey("create-student");
     setNotice(null);
 
     try {
@@ -80,17 +102,162 @@ export function StudentManagementPanel({
       if (!response.ok) throw new Error(message);
 
       form.reset();
-      setNotice({ type: "success", text: message });
+      showResult("success", message);
       router.refresh();
-      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
-      setNotice({
-        type: "error",
-        text: error instanceof Error ? error.message : "تعذر إنشاء ملف الطالب.",
-      });
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      showResult("error", error instanceof Error ? error.message : "تعذر إنشاء ملف الطالب.");
     } finally {
-      setBusy(false);
+      setBusyKey(null);
+    }
+  }
+
+  async function updateStudent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingStudent) return;
+
+    setBusyKey(`edit-student-${editingStudent.id}`);
+    setNotice(null);
+
+    const formData = new FormData(event.currentTarget);
+
+    try {
+      const response = await fetch(`/api/manager/students/${editingStudent.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: formData.get("fullName"),
+          displayName: formData.get("displayName"),
+          parentPhone: formData.get("parentPhone"),
+          gradeLevel: formData.get("gradeLevel"),
+          memorizationStartedOn: formData.get("memorizationStartedOn"),
+          notes: formData.get("notes"),
+        }),
+      });
+
+      const message = await readApiMessage(response);
+      if (!response.ok) throw new Error(message);
+
+      showResult("success", message);
+      setEditingStudent(null);
+      router.refresh();
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر تحديث ملف الطالب.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function toggleStudentStatus(studentId: string, currentIsActive: boolean) {
+    setBusyKey(`status-student-${studentId}`);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/manager/students/${studentId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isActive: !currentIsActive,
+          effectiveOn: todayInputValue(),
+        }),
+      });
+
+      const message = await readApiMessage(response);
+      if (!response.ok) throw new Error(message);
+
+      showResult("success", message);
+      router.refresh();
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر تغيير حالة الطالب.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function removeStudentFromHalaqa(studentId: string, halaqaName: string) {
+    if (!confirm(`هل أنت متأكد من إزالة الطالب من (${halaqaName})؟ سيتم إنهاء تسجيله الحالي مع الاحتفاظ بكافة سجلاته التاريخية.`)) {
+      return;
+    }
+
+    setBusyKey(`remove-student-${studentId}`);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/manager/students/${studentId}/enrollments`, {
+        method: "DELETE",
+      });
+
+      const message = await readApiMessage(response);
+      if (!response.ok) throw new Error(message);
+
+      showResult("success", message);
+      router.refresh();
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر إزالة الطالب من الحلقة.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function requestStudentPermanentDelete(studentId: string, studentName: string) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      showResult("error", "حذف الطالب يحتاج اتصالاً بالإنترنت.");
+      return;
+    }
+
+    setBusyKey(`delete-student-${studentId}`);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/manager/students/${studentId}`);
+      const apiData = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        counts?: { enrollments: number; sessions: number; exams: number };
+        hasLinkedData?: boolean;
+      };
+
+      if (!response.ok) throw new Error(apiData.message || "تعذر جلب بيانات الطالب.");
+
+      const counts = apiData.counts || { enrollments: 0, sessions: 0, exams: 0 };
+      const hasLinkedData = Boolean(apiData.hasLinkedData);
+
+      setStudentDeleteModal({
+        isOpen: true,
+        studentId,
+        studentName,
+        counts,
+        hasLinkedData,
+        typedName: "",
+        loading: false,
+      });
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر إتمام الطلب.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function executeStudentPermanentDelete(studentId: string) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      showResult("error", "حذف الطالب يحتاج اتصالاً بالإنترنت.");
+      return;
+    }
+
+    setBusyKey(`delete-student-${studentId}`);
+    try {
+      const response = await fetch(`/api/manager/students/${studentId}?force=true`, {
+        method: "DELETE",
+      });
+
+      const message = await readApiMessage(response);
+      if (!response.ok) throw new Error(message);
+
+      showResult("success", message);
+      setStudentDeleteModal(null);
+      router.refresh();
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر حذف الطالب.");
+    } finally {
+      setBusyKey(null);
     }
   }
 
@@ -221,9 +388,9 @@ export function StudentManagementPanel({
 
             <button
               className="min-h-12 w-full rounded-2xl bg-emerald-800 px-4 font-black text-white transition hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={busy || !halaqat.length}
+              disabled={busyKey !== null || !halaqat.length}
             >
-              {busy ? "جاري الحفظ..." : "إنشاء ملف الطالب وتسجيله"}
+              {busyKey === "create-student" ? "جاري الحفظ..." : "إنشاء ملف الطالب وتسجيله"}
             </button>
           </form>
         </section>
@@ -309,12 +476,61 @@ export function StudentManagementPanel({
                   <InfoItem label="هاتف ولي الأمر" value={student.parentPhone || "غير مسجل"} />
                 </div>
 
-                <Link
-                  className="mt-4 flex min-h-11 w-full items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-black text-emerald-900 transition hover:bg-emerald-100"
-                  href={`/manager/students/${student.id}`}
-                >
-                  فتح ملف الطالب
-                </Link>
+                <div className="mt-4 border-t border-slate-100 pt-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      className="flex min-h-10 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-black text-emerald-900 transition hover:bg-emerald-100"
+                      href={`/manager/students/${student.id}`}
+                    >
+                      📁 فتح الملف
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => setEditingStudent(student)}
+                      className="min-h-10 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                    >
+                      ✏️ تعديل
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      disabled={busyKey !== null}
+                      onClick={() => toggleStudentStatus(student.id, student.isActive)}
+                      className={`min-h-9 rounded-xl border text-[11px] font-bold transition disabled:opacity-50 ${
+                        student.isActive
+                          ? "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                      }`}
+                    >
+                      {student.isActive ? "⏸️ تعطيل" : "▶️ تفعيل"}
+                    </button>
+
+                    {student.activeEnrollment ? (
+                      <button
+                        type="button"
+                        disabled={busyKey !== null}
+                        onClick={() => removeStudentFromHalaqa(student.id, student.activeEnrollment?.halaqa.nameAr || "")}
+                        className="min-h-9 rounded-xl border border-orange-200 bg-orange-50 text-orange-900 text-[11px] font-bold hover:bg-orange-100 disabled:opacity-50"
+                      >
+                        🚫 إزالة من الحلقة
+                      </button>
+                    ) : (
+                      <div />
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={busyKey !== null}
+                      onClick={() => requestStudentPermanentDelete(student.id, student.displayName)}
+                      className="min-h-9 rounded-xl border border-red-200 bg-red-50 text-red-700 text-[11px] font-black hover:bg-red-100 disabled:opacity-50"
+                    >
+                      🗑️ حذف نهائي
+                    </button>
+                  </div>
+                </div>
               </article>
             ))
           ) : (
@@ -324,6 +540,175 @@ export function StudentManagementPanel({
           )}
         </section>
       </div>
+
+      {/* Edit Student Modal for Manager */}
+      {editingStudent ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs" dir="rtl">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-black text-slate-950">تعديل بيانات الطالب (المدير)</h3>
+            <p className="text-xs font-bold text-slate-500">تحديث البيانات الأساسية لملف الطالب.</p>
+
+            <form onSubmit={updateStudent} className="space-y-3">
+              <div>
+                <label className="form-label">الاسم الكامل للطالب</label>
+                <input
+                  name="fullName"
+                  required
+                  defaultValue={editingStudent.fullName}
+                  className="form-control text-sm font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="form-label">اسم العرض (المختصر)</label>
+                <input
+                  name="displayName"
+                  required
+                  defaultValue={editingStudent.displayName}
+                  className="form-control text-sm font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="form-label">هاتف ولي الأمر</label>
+                <input
+                  name="parentPhone"
+                  defaultValue={editingStudent.parentPhone || ""}
+                  placeholder="0599000000"
+                  className="form-control text-sm font-bold"
+                  dir="ltr"
+                />
+              </div>
+
+              <div>
+                <label className="form-label">الصف الدراسي</label>
+                <input
+                  name="gradeLevel"
+                  defaultValue={editingStudent.gradeLevel || ""}
+                  placeholder="مثال: الصف السادس"
+                  className="form-control text-sm font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="form-label">تاريخ بداية الحفظ</label>
+                <input
+                  type="date"
+                  name="memorizationStartedOn"
+                  defaultValue={editingStudent.memorizationStartedOn ? editingStudent.memorizationStartedOn.slice(0, 10) : ""}
+                  className="form-control text-sm font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="form-label">ملاحظات الطالب</label>
+                <textarea
+                  name="notes"
+                  defaultValue={editingStudent.notes || ""}
+                  placeholder="ملاحظات اختيارية"
+                  className="form-control min-h-20 text-sm font-bold"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingStudent(null)}
+                  className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                  disabled={busyKey !== null}
+                >
+                  إلغاء
+                </button>
+
+                <button
+                  type="submit"
+                  className="min-h-11 rounded-xl bg-emerald-800 px-5 text-xs font-black text-white hover:bg-emerald-900 disabled:opacity-50"
+                  disabled={busyKey !== null}
+                >
+                  {busyKey === `edit-student-${editingStudent.id}` ? "جاري الحفظ..." : "حفظ التعديلات"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Student Permanent Delete Danger Modal for Manager */}
+      {studentDeleteModal && studentDeleteModal.isOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs" dir="rtl">
+          <div className="w-full max-w-lg space-y-4 rounded-3xl border border-red-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-red-700">
+              <div className="flex size-10 items-center justify-center rounded-2xl bg-red-100 text-xl font-black">⚠️</div>
+              <h3 className="text-lg font-black text-slate-950">
+                {studentDeleteModal.hasLinkedData ? "تأكيد الحذف النهائي لطالب لديه بيانات" : "حذف الطالب نهائياً"}
+              </h3>
+            </div>
+
+            {studentDeleteModal.hasLinkedData ? (
+              <div className="space-y-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-bold leading-6 text-red-900">
+                <p className="text-sm font-black text-red-950">هذا الطالب لديه بيانات مرتبطة. حذفه نهائياً سيؤدي إلى حذف:</p>
+                <ul className="list-inside list-disc space-y-1">
+                  <li>تسجيلاته في الحلقات ({studentDeleteModal.counts.enrollments} تسجيل)</li>
+                  <li>جلسات التسميع الخاصة به ({studentDeleteModal.counts.sessions} جلسة)</li>
+                  <li>الحفظ والمراجعة والسرد التابع لهذه الجلسات</li>
+                  <li>الاختبارات الرسمية المرتبطة ({studentDeleteModal.counts.exams} اختبار)</li>
+                  <li>التقارير وسجلات المتابعة المرتبطة به</li>
+                  <li>أي بيانات تشغيلية خاصة به</li>
+                </ul>
+                <p className="pt-1 font-black text-red-700">لا يمكن التراجع عن هذه العملية.</p>
+              </div>
+            ) : (
+              <p className="text-sm font-bold text-slate-600">
+                هل أنت متأكد من حذف الطالب ({studentDeleteModal.studentName}) نهائياً؟ لا يملك الطالب أي سجلات مرتبطة.
+              </p>
+            )}
+
+            {studentDeleteModal.hasLinkedData ? (
+              <div className="space-y-2">
+                <label className="block text-xs font-extrabold text-slate-700" htmlFor="student-confirm-input">
+                  اكتب اسم الطالب لتأكيد الحذف النهائي: <span className="font-black text-red-700">({studentDeleteModal.studentName})</span>
+                </label>
+                <input
+                  id="student-confirm-input"
+                  className="form-control border-red-300 text-sm font-bold focus:border-red-600 focus:ring-red-200"
+                  placeholder="اكتب اسم الطالب هنا للتأكيد..."
+                  value={studentDeleteModal.typedName}
+                  onChange={(e) =>
+                    setStudentDeleteModal((prev) => (prev ? { ...prev, typedName: e.target.value } : null))
+                  }
+                />
+              </div>
+            ) : null}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                onClick={() => setStudentDeleteModal(null)}
+                disabled={studentDeleteModal.loading}
+              >
+                إلغاء
+              </button>
+
+              <button
+                type="button"
+                className="min-h-11 rounded-xl bg-red-700 px-5 text-sm font-black text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={
+                  studentDeleteModal.loading ||
+                  (studentDeleteModal.hasLinkedData &&
+                    studentDeleteModal.typedName.trim() !== studentDeleteModal.studentName.trim())
+                }
+                onClick={async () => {
+                  setStudentDeleteModal((prev) => (prev ? { ...prev, loading: true } : null));
+                  await executeStudentPermanentDelete(studentDeleteModal.studentId);
+                }}
+              >
+                {studentDeleteModal.loading ? "جاري الحذف..." : "حذف نهائي للطالب والبيانات"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

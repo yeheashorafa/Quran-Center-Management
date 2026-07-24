@@ -137,3 +137,76 @@ export async function POST(
     return errorResponse("تعذر تسجيل الطالب في الحلقة حالياً.", 500);
   }
 }
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ studentId: string }> },
+) {
+  if (!isSameOriginRequest(request)) {
+    return errorResponse("تم رفض الطلب لأسباب أمنية.", 403);
+  }
+
+  const authorization = await authorizeApiPermission("students.manage");
+  if (authorization.response) return authorization.response;
+
+  const { studentId } = await context.params;
+  if (!studentIdSchema.safeParse(studentId).success) {
+    return errorResponse("معرف الطالب غير صالح.", 400);
+  }
+
+  const url = new URL(request.url);
+  const enrollmentId = url.searchParams.get("enrollmentId");
+
+  const enrollment = await prisma.studentEnrollment.findFirst({
+    where: enrollmentId
+      ? { id: enrollmentId, studentId, deletedAt: null }
+      : { studentId, status: "ACTIVE", endedOn: null, deletedAt: null },
+    select: {
+      id: true,
+      student: { select: { displayName: true } },
+      halaqa: { select: { nameAr: true } },
+    },
+  });
+
+  if (!enrollment) {
+    return errorResponse("التسجيل النشط للطالب غير موجود.", 404);
+  }
+
+  const requestId = randomUUID();
+  const ipAddress = getRequestIp(request);
+  const userAgent = getRequestUserAgent(request);
+  const now = new Date();
+
+  await prisma.$transaction(async (transaction) => {
+    await transaction.studentEnrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        status: "INACTIVE",
+        endedOn: now,
+        endReason: "تم إزالة الطالب من الحلقة",
+      },
+    });
+
+    await transaction.auditLog.create({
+      data: {
+        actorUserId: authorization.session.user.id,
+        action: "STUDENT_REMOVED_FROM_HALAQA",
+        entityType: "student_enrollment",
+        entityId: enrollment.id,
+        requestId,
+        ipAddress,
+        userAgent,
+        newValues: {
+          studentId,
+          studentName: enrollment.student.displayName,
+          halaqaName: enrollment.halaqa.nameAr,
+          endedOn: now.toISOString().slice(0, 10),
+        },
+      },
+    });
+  });
+
+  return NextResponse.json({
+    message: `تمت إزالة الطالب من ${enrollment.halaqa.nameAr} وحفظ سجلاته التاريخية.`,
+  });
+}

@@ -24,6 +24,44 @@ function dateOnly(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ studentId: string }> },
+) {
+  const authorization = await authorizeApiPermission("students.manage");
+  if (authorization.response) return authorization.response;
+
+  const { studentId } = await context.params;
+  if (!studentIdSchema.safeParse(studentId).success) {
+    return errorResponse("معرف الطالب غير صالح.", 400);
+  }
+
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { id: true, fullName: true, displayName: true, isActive: true },
+  });
+
+  if (!student) {
+    return errorResponse("الطالب غير موجود.", 404);
+  }
+
+  const [enrollmentCount, sessionCount, examCount] = await Promise.all([
+    prisma.studentEnrollment.count({ where: { studentId } }),
+    prisma.sessionRecordItem.count({ where: { studentId } }),
+    prisma.officialExam.count({ where: { studentId } }),
+  ]);
+
+  return NextResponse.json({
+    student,
+    counts: {
+      enrollments: enrollmentCount,
+      sessions: sessionCount,
+      exams: examCount,
+    },
+    hasLinkedData: enrollmentCount > 0 || sessionCount > 0 || examCount > 0,
+  });
+}
+
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ studentId: string }> },
@@ -115,4 +153,135 @@ export async function PATCH(
   });
 
   return NextResponse.json({ message: "تم تحديث ملف الطالب بنجاح." });
+}
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ studentId: string }> },
+) {
+  if (!isSameOriginRequest(request)) {
+    return errorResponse("تم رفض الطلب لأسباب أمنية.", 403);
+  }
+
+  const authorization = await authorizeApiPermission("students.manage");
+  if (authorization.response) return authorization.response;
+
+  const { studentId } = await context.params;
+  if (!studentIdSchema.safeParse(studentId).success) {
+    return errorResponse("معرف الطالب غير صالح.", 400);
+  }
+
+  const url = new URL(request.url);
+  const force = url.searchParams.get("force") === "true";
+
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { id: true, fullName: true, displayName: true },
+  });
+
+  if (!student) {
+    return errorResponse("الطالب غير موجود.", 404);
+  }
+
+  const [enrollmentCount, sessionCount, examCount] = await Promise.all([
+    prisma.studentEnrollment.count({ where: { studentId } }),
+    prisma.sessionRecordItem.count({ where: { studentId } }),
+    prisma.officialExam.count({ where: { studentId } }),
+  ]);
+
+  const hasLinkedData = enrollmentCount > 0 || sessionCount > 0 || examCount > 0;
+
+  if (hasLinkedData && !force) {
+    return NextResponse.json(
+      {
+        message: "هذا الطالب لديه بيانات مرتبطة. يجب تأكيد الحذف النهائي.",
+        counts: {
+          enrollments: enrollmentCount,
+          sessions: sessionCount,
+          exams: examCount,
+        },
+        hasLinkedData: true,
+      },
+      { status: 400 },
+    );
+  }
+
+  const requestId = randomUUID();
+  const ipAddress = getRequestIp(request);
+  const userAgent = getRequestUserAgent(request);
+
+  await prisma.$transaction(async (transaction) => {
+    // 1. Delete SessionActivities for this student
+    const recordItems = await transaction.sessionRecordItem.findMany({
+      where: { studentId },
+      select: { id: true },
+    });
+    const itemIds = recordItems.map((i) => i.id);
+
+    if (itemIds.length > 0) {
+      await transaction.sessionActivity.deleteMany({
+        where: { itemId: { in: itemIds } },
+      });
+    }
+
+    // 2. Delete SessionRecordItems for this student
+    await transaction.sessionRecordItem.deleteMany({
+      where: { studentId },
+    });
+
+    // 3. Delete OfficialExams and OfficialExamScopes for this student
+    const exams = await transaction.officialExam.findMany({
+      where: { studentId },
+      select: { id: true },
+    });
+    const examIds = exams.map((ex) => ex.id);
+
+    if (examIds.length > 0) {
+      await transaction.officialExamScope.deleteMany({
+        where: { examId: { in: examIds } },
+      });
+      await transaction.officialExam.deleteMany({
+        where: { studentId },
+      });
+    }
+
+    // 4. Delete StudentTransfers referencing this student
+    await transaction.studentTransfer.deleteMany({
+      where: { studentId },
+    });
+
+    // 5. Delete StudentEnrollments for this student
+    await transaction.studentEnrollment.deleteMany({
+      where: { studentId },
+    });
+
+    // 6. Delete Student record itself
+    await transaction.student.delete({
+      where: { id: studentId },
+    });
+
+    // 7. Audit Log
+    await transaction.auditLog.create({
+      data: {
+        actorUserId: authorization.session.user.id,
+        action: "STUDENT_PERMANENTLY_DELETED",
+        entityType: "student",
+        entityId: studentId,
+        requestId,
+        ipAddress,
+        userAgent,
+        oldValues: { fullName: student.fullName, displayName: student.displayName },
+        metadata: {
+          deletedEnrollmentsCount: enrollmentCount,
+          deletedSessionsCount: sessionCount,
+          deletedExamsCount: examCount,
+          forced: force,
+        },
+      },
+    });
+  });
+
+  return NextResponse.json({
+    message: "تم حذف الطالب وتصفية كافة بياناته نهائياً بنجاح.",
+  });
 }

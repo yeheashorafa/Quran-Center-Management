@@ -13,6 +13,8 @@ export type ManagerStudentItem = {
   displayName: string;
   parentPhone: string | null;
   gradeLevel: string | null;
+  memorizationStartedOn?: string | null;
+  notes?: string | null;
   isActive: boolean;
   activeEnrollment: {
     id: string;

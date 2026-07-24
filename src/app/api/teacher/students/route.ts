@@ -142,6 +142,8 @@ const updateTeacherStudentSchema = z.object({
   parentPhone: z.string().trim().nullable().optional(),
   gradeLevel: z.string().trim().nullable().optional(),
   memorizationStartedOn: z.string().trim().nullable().optional(),
+  notes: z.string().trim().nullable().optional(),
+  isActive: z.boolean().optional(),
 });
 
 export async function PUT(request: Request) {
@@ -195,8 +197,26 @@ export async function PUT(request: Request) {
           memorizationStartedOn: parsed.data.memorizationStartedOn
             ? new Date(parsed.data.memorizationStartedOn)
             : undefined,
+          notes: parsed.data.notes !== undefined ? parsed.data.notes || null : undefined,
+          isActive: parsed.data.isActive !== undefined ? parsed.data.isActive : undefined,
         },
       });
+
+      if (parsed.data.isActive === false) {
+        await tx.studentEnrollment.updateMany({
+          where: {
+            studentId: parsed.data.studentId,
+            status: "ACTIVE",
+            endedOn: null,
+            deletedAt: null,
+          },
+          data: {
+            status: "INACTIVE",
+            endedOn: new Date(),
+            endReason: "تم إيقاف الطالب من الشيخ",
+          },
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -212,6 +232,8 @@ export async function PUT(request: Request) {
             displayName: student.displayName,
             parentPhone: student.parentPhone,
             gradeLevel: student.gradeLevel,
+            notes: student.notes,
+            isActive: student.isActive,
           },
         },
       });
@@ -227,4 +249,127 @@ export async function PUT(request: Request) {
     console.error("Update teacher student failed:", err);
     return errorResponse("تعذر تحديث بيانات الطالب حالياً.", 500);
   }
+}
+
+export async function DELETE(request: Request) {
+  if (!isSameOriginRequest(request)) {
+    return errorResponse("تم رفض الطلب لأسباب أمنية.", 403);
+  }
+
+  const authorization = await authorizeApiPermission("sessions.manage.own");
+  if (authorization.response) return authorization.response;
+
+  const url = new URL(request.url);
+  const studentId = url.searchParams.get("studentId");
+  const halaqaId = url.searchParams.get("halaqaId");
+  const action = url.searchParams.get("action") || "remove";
+
+  if (!studentId || !halaqaId) {
+    return errorResponse("معرف الطالب والحلقة مطلوبان.", 400);
+  }
+
+  // Verify teacher is assigned to this halaqa
+  const assignment = await prisma.halaqaStaffAssignment.findFirst({
+    where: {
+      userId: authorization.session.user.id,
+      halaqaId,
+      deletedAt: null,
+    },
+    select: { halaqa: { select: { id: true, nameAr: true } } },
+  });
+
+  if (!assignment) {
+    return errorResponse("ليس لديك صلاحية لإدارة طلاب هذه الحلقة.", 403);
+  }
+
+  const enrollment = await prisma.studentEnrollment.findFirst({
+    where: {
+      studentId,
+      halaqaId,
+      deletedAt: null,
+      status: "ACTIVE",
+    },
+    select: { id: true, student: { select: { displayName: true } } },
+  });
+
+  if (!enrollment) {
+    return errorResponse("تسجيل الطالب في هذه الحلقة غير موجود أو غير نشط.", 404);
+  }
+
+  const requestId = randomUUID();
+  const ipAddress = getRequestIp(request);
+  const userAgent = getRequestUserAgent(request);
+  const now = new Date();
+
+  if (action === "delete") {
+    // Check if student has ANY records (sessions or exams)
+    const [sessionCount, examCount] = await Promise.all([
+      prisma.sessionRecordItem.count({ where: { studentId } }),
+      prisma.officialExam.count({ where: { studentId } }),
+    ]);
+
+    if (sessionCount > 0 || examCount > 0) {
+      return errorResponse(
+        "الطالب لديه سجلات تسميع أو اختبارات. لا يمكن حذفه نهائياً، يمكنك إزالته من الحلقة أو تعطيله فقط.",
+        400,
+      );
+    }
+
+    // Unused test student with 0 records -> permanent delete student enrollment and student
+    await prisma.$transaction(async (tx) => {
+      await tx.studentEnrollment.deleteMany({ where: { studentId } });
+      await tx.student.delete({ where: { id: studentId } });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: authorization.session.user.id,
+          action: "TEACHER_STUDENT_DELETED",
+          entityType: "student",
+          entityId: studentId,
+          requestId,
+          ipAddress,
+          userAgent,
+          metadata: { halaqaId, halaqaName: assignment.halaqa.nameAr },
+        },
+      });
+    });
+
+    return NextResponse.json({
+      message: "تم حذف الطالب التجريبي نهائياً لعدم وجود سجلات مرتبطة به.",
+    });
+  }
+
+  // Default action: "remove" / deactivate from this halaqa
+  await prisma.$transaction(async (tx) => {
+    await tx.studentEnrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        status: "INACTIVE",
+        endedOn: now,
+        endReason: "تم إزالة الطالب بواسطة الشيخ",
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorUserId: authorization.session.user.id,
+        action: "TEACHER_STUDENT_REMOVED_FROM_HALAQA",
+        entityType: "student_enrollment",
+        entityId: enrollment.id,
+        requestId,
+        ipAddress,
+        userAgent,
+        newValues: {
+          studentId,
+          studentName: enrollment.student.displayName,
+          halaqaId,
+          halaqaName: assignment.halaqa.nameAr,
+        },
+      },
+    });
+  });
+
+  return NextResponse.json({
+    message: `تمت إزالة الطالب من ${assignment.halaqa.nameAr} بنجاح وحفظ سجلاته.`,
+  });
 }
