@@ -20,6 +20,20 @@ type ApiMessage = {
   message?: string;
 };
 
+type HalaqaDeleteModalState = {
+  isOpen: boolean;
+  halaqaId: string;
+  halaqaName: string;
+  counts: {
+    enrollments: number;
+    sessions: number;
+    exams: number;
+  };
+  hasLinkedData: boolean;
+  typedName: string;
+  loading: boolean;
+};
+
 const ROLE_LABELS: Record<AppRoleCode, string> = {
   TEACHER: "شيخ / محفّظ",
   CENTER_MANAGER: "مدير مركز",
@@ -52,6 +66,7 @@ export function ManagementPanel({
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [halaqaDeleteModal, setHalaqaDeleteModal] = useState<HalaqaDeleteModalState | null>(null);
 
   const activeTeachers = useMemo(
     () =>
@@ -170,6 +185,43 @@ export function ManagementPanel({
     }
   }
 
+  function requestUserPermanentDelete(userId: string, displayName: string) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      showResult("error", "الحذف النهائي يحتاج اتصالاً بالإنترنت.");
+      return;
+    }
+
+    setConfirmState({
+      isOpen: true,
+      title: "تأكيد الحذف النهائي للمستخدم",
+      description: `هل أنت متأكد من حذف المستخدم (${displayName}) نهائياً؟ إذا كان لدى المستخدم سجلات في النظام، سيتم منع الحذف لحماية البيانات.`,
+      confirmText: "حذف نهائي",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmLoading(true);
+        const key = `delete-user-${userId}`;
+        setBusyKey(key);
+        setNotice(null);
+        try {
+          const response = await fetch(`/api/manager/users/${userId}`, {
+            method: "DELETE",
+          });
+          const message = await readApiMessage(response);
+          if (!response.ok) throw new Error(message);
+
+          showResult("success", message);
+          router.refresh();
+        } catch (error) {
+          showResult("error", error instanceof Error ? error.message : "تعذر حذف المستخدم.");
+        } finally {
+          setConfirmLoading(false);
+          setConfirmState(null);
+          setBusyKey(null);
+        }
+      },
+    });
+  }
+
   async function createHalaqa(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -244,6 +296,69 @@ export function ManagementPanel({
       });
     } else {
       void updateHalaqaStatus(halaqaId, status);
+    }
+  }
+
+  async function requestHalaqaPermanentDelete(halaqaId: string, halaqaName: string) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      showResult("error", "الحذف النهائي يحتاج اتصالاً بالإنترنت.");
+      return;
+    }
+
+    const key = `delete-halaqa-${halaqaId}`;
+    setBusyKey(key);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/manager/halaqat/${halaqaId}`);
+      const apiData = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        counts?: { enrollments: number; sessions: number; exams: number };
+        hasLinkedData?: boolean;
+      };
+
+      if (!response.ok) throw new Error(apiData.message || "تعذر جلب بيانات الحلقة.");
+
+      const counts = apiData.counts || { enrollments: 0, sessions: 0, exams: 0 };
+      const hasLinkedData = Boolean(apiData.hasLinkedData);
+
+      setHalaqaDeleteModal({
+        isOpen: true,
+        halaqaId,
+        halaqaName,
+        counts,
+        hasLinkedData,
+        typedName: "",
+        loading: false,
+      });
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر إتمام الطلب.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function executeHalaqaPermanentDelete(halaqaId: string) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      showResult("error", "الحذف النهائي يحتاج اتصالاً بالإنترنت.");
+      return;
+    }
+
+    setBusyKey(`delete-halaqa-${halaqaId}`);
+    try {
+      const response = await fetch(`/api/manager/halaqat/${halaqaId}?force=true`, {
+        method: "DELETE",
+      });
+      const message = await readApiMessage(response);
+      if (!response.ok) throw new Error(message);
+
+      showResult("success", message);
+      setHalaqaDeleteModal(null);
+      router.refresh();
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر حذف الحلقة.");
+    } finally {
+      setBusyKey(null);
     }
   }
 
@@ -482,21 +597,32 @@ export function ManagementPanel({
 
                 {halaqa.notes ? <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{halaqa.notes}</p> : null}
 
-                <button
-                  className={`mt-4 min-h-11 w-full rounded-xl border px-4 text-sm font-black transition disabled:opacity-60 ${
-                    halaqa.status === "ACTIVE"
-                      ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                  }`}
-                  disabled={busyKey !== null}
-                  onClick={() => requestHalaqaStatusToggle(halaqa.id, halaqa.status === "ACTIVE" ? "INACTIVE" : "ACTIVE", halaqa.nameAr)}
-                >
-                  {busyKey === `halaqa-${halaqa.id}`
-                    ? "جاري التحديث..."
-                    : halaqa.status === "ACTIVE"
-                      ? "إيقاف الحلقة بدون حذف البيانات"
-                      : "إعادة تفعيل الحلقة"}
-                </button>
+                {halaqa.status === "INACTIVE" ? (
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      className="min-h-11 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60"
+                      disabled={busyKey !== null}
+                      onClick={() => requestHalaqaStatusToggle(halaqa.id, "ACTIVE", halaqa.nameAr)}
+                    >
+                      {busyKey === `halaqa-${halaqa.id}` ? "جاري التحديث..." : "إعادة تفعيل الحلقة"}
+                    </button>
+                    <button
+                      className="min-h-11 rounded-xl border border-red-200 bg-red-50 px-3 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                      disabled={busyKey !== null}
+                      onClick={() => requestHalaqaPermanentDelete(halaqa.id, halaqa.nameAr)}
+                    >
+                      {busyKey === `delete-halaqa-${halaqa.id}` ? "جاري التحقق..." : "حذف نهائي"}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="mt-4 min-h-11 w-full rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                    disabled={busyKey !== null}
+                    onClick={() => requestHalaqaStatusToggle(halaqa.id, "INACTIVE", halaqa.nameAr)}
+                  >
+                    {busyKey === `halaqa-${halaqa.id}` ? "جاري التحديث..." : "إيقاف الحلقة بدون حذف البيانات"}
+                  </button>
+                )}
               </article>
             )) : (
               <EmptyState text="لم تتم إضافة حلقات بعد." />
@@ -594,28 +720,118 @@ export function ManagementPanel({
                   </div>
                 ) : null}
 
-                <button
-                  className={`mt-4 min-h-11 w-full rounded-xl border px-4 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                    user.status === "ACTIVE"
-                      ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                  }`}
-                  disabled={busyKey !== null || user.isCurrentUser}
-                  onClick={() => requestUserStatusToggle(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE", user.displayName)}
-                >
-                  {busyKey === `user-${user.id}`
-                    ? "جاري التحديث..."
-                    : user.isCurrentUser
-                      ? "لا يمكن إيقاف الحساب الحالي"
-                      : user.status === "ACTIVE"
-                        ? "إيقاف المستخدم"
-                        : "تفعيل المستخدم"}
-                </button>
+                {user.status === "DISABLED" && !user.isCurrentUser ? (
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      className="min-h-11 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60"
+                      disabled={busyKey !== null}
+                      onClick={() => requestUserStatusToggle(user.id, "ACTIVE", user.displayName)}
+                    >
+                      {busyKey === `user-${user.id}` ? "جاري التحديث..." : "تفعيل المستخدم"}
+                    </button>
+                    <button
+                      className="min-h-11 rounded-xl border border-red-200 bg-red-50 px-3 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                      disabled={busyKey !== null}
+                      onClick={() => requestUserPermanentDelete(user.id, user.displayName)}
+                    >
+                      {busyKey === `delete-user-${user.id}` ? "جاري الحذف..." : "حذف نهائي"}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="mt-4 min-h-11 w-full rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={busyKey !== null || user.isCurrentUser}
+                    onClick={() => requestUserStatusToggle(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE", user.displayName)}
+                  >
+                    {busyKey === `user-${user.id}`
+                      ? "جاري التحديث..."
+                      : user.isCurrentUser
+                        ? "لا يمكن إيقاف الحساب الحالي"
+                        : user.status === "ACTIVE"
+                          ? "إيقاف المستخدم"
+                          : "تفعيل المستخدم"}
+                  </button>
+                )}
               </article>
             ))}
           </section>
         </div>
       )}
+
+      {halaqaDeleteModal && halaqaDeleteModal.isOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs" dir="rtl">
+          <div className="w-full max-w-lg space-y-4 rounded-3xl border border-red-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-red-700">
+              <div className="flex size-10 items-center justify-center rounded-2xl bg-red-100 text-xl font-black">⚠️</div>
+              <h3 className="text-lg font-black text-slate-950">
+                {halaqaDeleteModal.hasLinkedData ? "تأكيد الحذف النهائي لحلقة تحتوي على بيانات" : "حذف الحلقة نهائياً"}
+              </h3>
+            </div>
+
+            {halaqaDeleteModal.hasLinkedData ? (
+              <div className="space-y-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-bold leading-6 text-red-900">
+                <p className="text-sm font-black text-red-950">هذه الحلقة تحتوي على بيانات مرتبطة. حذفها سيؤدي إلى حذف:</p>
+                <ul className="list-inside list-disc space-y-1">
+                  <li>تسجيلات الطلاب المرتبطة بالحلقة ({halaqaDeleteModal.counts.enrollments} طالب/تسجيل)</li>
+                  <li>جلسات التسميع ({halaqaDeleteModal.counts.sessions} جلسة)</li>
+                  <li>الحفظ والمراجعة والسرد التابع لهذه الجلسات</li>
+                  <li>الاختبارات الرسمية المرتبطة ({halaqaDeleteModal.counts.exams} اختبار)</li>
+                  <li>أي بيانات تشغيلية مرتبطة بهذه الحلقة</li>
+                </ul>
+                <p className="pt-1 font-black text-red-700">لا يمكن التراجع عن هذه العملية.</p>
+              </div>
+            ) : (
+              <p className="text-sm font-bold text-slate-600">
+                هل أنت متأكد من حذف حلقة ({halaqaDeleteModal.halaqaName}) نهائياً؟ لا تحتوي الحلقة على أي بيانات مرتبطة.
+              </p>
+            )}
+
+            {halaqaDeleteModal.hasLinkedData ? (
+              <div className="space-y-2">
+                <label className="block text-xs font-extrabold text-slate-700" htmlFor="halaqa-confirm-input">
+                  اكتب اسم الحلقة لتأكيد الحذف النهائي: <span className="font-black text-red-700">({halaqaDeleteModal.halaqaName})</span>
+                </label>
+                <input
+                  id="halaqa-confirm-input"
+                  className="form-control border-red-300 text-sm font-bold focus:border-red-600 focus:ring-red-200"
+                  placeholder="اكتب اسم الحلقة هنا للتأكيد..."
+                  value={halaqaDeleteModal.typedName}
+                  onChange={(e) =>
+                    setHalaqaDeleteModal((prev) => (prev ? { ...prev, typedName: e.target.value } : null))
+                  }
+                />
+              </div>
+            ) : null}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                onClick={() => setHalaqaDeleteModal(null)}
+                disabled={halaqaDeleteModal.loading}
+              >
+                إلغاء
+              </button>
+
+              <button
+                type="button"
+                className="min-h-11 rounded-xl bg-red-700 px-5 text-sm font-black text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={
+                  halaqaDeleteModal.loading ||
+                  (halaqaDeleteModal.hasLinkedData &&
+                    halaqaDeleteModal.typedName.trim() !== halaqaDeleteModal.halaqaName.trim())
+                }
+                onClick={async () => {
+                  setHalaqaDeleteModal((prev) => (prev ? { ...prev, loading: true } : null));
+                  await executeHalaqaPermanentDelete(halaqaDeleteModal.halaqaId);
+                }}
+              >
+                {halaqaDeleteModal.loading ? "جاري الحذف..." : "حذف نهائي للمحتوى والحلقة"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {confirmState ? (
         <ConfirmDialog
