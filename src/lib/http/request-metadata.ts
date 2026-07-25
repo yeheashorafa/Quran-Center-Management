@@ -22,6 +22,26 @@ function uniqueOrigins(values: Array<string | null | undefined>): string[] {
   );
 }
 
+export function getRequestIp(request: Request | NextRequest): string {
+  const headers = request.headers;
+
+  const forwardedFor = headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0]?.trim() || "unknown";
+  }
+
+  return (
+    headers.get("x-real-ip") ||
+    headers.get("cf-connecting-ip") ||
+    headers.get("x-client-ip") ||
+    "unknown"
+  );
+}
+
+export function getRequestUserAgent(request: Request | NextRequest): string {
+  return request.headers.get("user-agent") || "unknown";
+}
+
 export function isSameOriginRequest(request: Request | NextRequest): boolean {
   const method = request.method.toUpperCase();
 
