@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { processSyncQueue, type SyncQueueItem } from "@/lib/offline/sync-queue";
 
 export function PendingSessionsList({
@@ -12,6 +12,23 @@ export function PendingSessionsList({
 }) {
   const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setIsOffline(typeof navigator !== "undefined" && !navigator.onLine);
+    });
+    function handleOnline() { if (active) setIsOffline(false); }
+    function handleOffline() { if (active) setIsOffline(true); }
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      active = false;
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   const handleManualSync = useCallback(async () => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -53,7 +70,7 @@ export function PendingSessionsList({
 
         <button
           type="button"
-          disabled={syncing || (typeof navigator !== "undefined" && !navigator.onLine)}
+          disabled={syncing || isOffline}
           onClick={() => void handleManualSync()}
           className="rounded-2xl bg-[var(--primary)] px-5 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[var(--primary-dark)] disabled:opacity-50"
         >

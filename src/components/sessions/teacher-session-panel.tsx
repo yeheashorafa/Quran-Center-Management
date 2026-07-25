@@ -27,23 +27,23 @@ const ACTIVITY_LABELS: Record<
   MEMORIZATION: {
     label: "حفظ جديد",
     icon: "📖",
-    colorClass: "text-emerald-900",
-    bgClass: "bg-emerald-50",
-    borderClass: "border-emerald-300",
+    colorClass: "text-emerald-900 dark:text-emerald-300",
+    bgClass: "bg-emerald-50 dark:bg-[rgba(16,185,129,0.12)]",
+    borderClass: "border-emerald-300 dark:border-[rgba(16,185,129,0.35)]",
   },
   REVIEW: {
     label: "مراجعة",
     icon: "🔄",
-    colorClass: "text-blue-900",
-    bgClass: "bg-blue-50",
-    borderClass: "border-blue-300",
+    colorClass: "text-blue-900 dark:text-blue-300",
+    bgClass: "bg-blue-50 dark:bg-[rgba(59,130,246,0.12)]",
+    borderClass: "border-blue-300 dark:border-[rgba(59,130,246,0.35)]",
   },
   RECITATION: {
     label: "سرد",
     icon: "🎙️",
-    colorClass: "text-purple-900",
-    bgClass: "bg-purple-50",
-    borderClass: "border-purple-300",
+    colorClass: "text-purple-900 dark:text-purple-300",
+    bgClass: "bg-purple-50 dark:bg-[rgba(168,85,247,0.12)]",
+    borderClass: "border-purple-300 dark:border-[rgba(168,85,247,0.35)]",
   },
 };
 
@@ -76,7 +76,24 @@ export function TeacherSessionPanel({
 
   // Offline status & cache metadata
   const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
+  const [isClientOffline, setIsClientOffline] = useState<boolean>(false);
   const [lastCacheTime, setLastCacheTime] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setIsClientOffline(typeof navigator !== "undefined" && !navigator.onLine);
+    });
+    function handleOnline() { if (active) setIsClientOffline(false); }
+    function handleOffline() { if (active) setIsClientOffline(true); }
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      active = false;
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   // Local Draft & Queue state
   const [pendingDraft, setPendingDraft] = useState<SessionDraftRecord | null>(null);
@@ -291,7 +308,7 @@ export function TeacherSessionPanel({
     setNotice(null);
 
     const payloadData = { date: sessionDate, complete, items };
-    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    const isOffline = isOfflineMode || isClientOffline;
 
     if (isOffline || isOfflineMode) {
       await enqueueSyncItem({
@@ -354,7 +371,7 @@ export function TeacherSessionPanel({
       <NetworkStatusBar onSyncCompleted={() => void getAllSyncItems().then(setOfflineSyncItems)} />
 
       {/* Offline Mode Last Cache Timestamp Banner (Requirement 5) */}
-      {isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine) ? (
+      {isOfflineMode || isClientOffline ? (
         <aside aria-label="شريط وضع الأوفلاين" className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-3.5 text-xs font-bold text-[var(--status-warning-text)] shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="size-2.5 rounded-full bg-[var(--warning)] animate-pulse" />
@@ -784,7 +801,7 @@ export function TeacherSessionPanel({
 
       {/* Tab 4: Parent Report Selector Tab */}
       {activeTab === "parent_report" ? (
-        isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine) ? (
+        isOfflineMode || isClientOffline ? (
           <aside className="rounded-3xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-6 text-center text-xs font-bold text-[var(--status-warning-text)] space-y-2">
             <span className="text-3xl block">📄</span>
             <h3 className="text-sm font-black text-[var(--status-warning-text)]">تقرير ولي الأمر يحتاج إلى اتّصال بالإنترنت</h3>
@@ -799,7 +816,7 @@ export function TeacherSessionPanel({
 
       {/* Tab 5: Monthly Reports Tab */}
       {activeTab === "monthly_report" ? (
-        isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine) ? (
+        isOfflineMode || isClientOffline ? (
           <aside className="rounded-3xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-6 text-center text-xs font-bold text-[var(--status-warning-text)] space-y-2">
             <span className="text-3xl block">📊</span>
             <h3 className="text-sm font-black text-[var(--status-warning-text)]">التقرير الشهري يحتاج إلى اتّصال بالإنترنت</h3>

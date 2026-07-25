@@ -108,7 +108,24 @@ export function ExaminerExamsPanel({
 
   // Offline examiner status
   const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [isClientOffline, setIsClientOffline] = useState(false);
   const [lastCacheTime, setLastCacheTime] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setIsClientOffline(typeof navigator !== "undefined" && !navigator.onLine);
+    });
+    function handleOnline() { if (active) setIsClientOffline(false); }
+    function handleOffline() { if (active) setIsClientOffline(true); }
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      active = false;
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
   const [pendingSyncItems, setPendingSyncItems] = useState<SyncQueueItem[]>([]);
 
   const refreshPendingExams = useCallback(async () => {
@@ -457,7 +474,7 @@ export function ExaminerExamsPanel({
       <NetworkStatusBar onSyncCompleted={() => void refreshPendingExams()} />
 
       {/* Offline Mode Banner for Examiner */}
-      {isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine) ? (
+      {isOfflineMode || isClientOffline ? (
         <aside aria-label="شريط وضع الأوفلاين للمختبر" className="rounded-2xl border border-[var(--status-info-border)] bg-[var(--status-info-bg)] p-3.5 text-xs font-bold text-[var(--status-info-text)] shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="size-2.5 rounded-full bg-[var(--primary)] animate-pulse" />
