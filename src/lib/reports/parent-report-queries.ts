@@ -4,6 +4,7 @@ import { appConfig } from "@/config/app";
 import type { AuthenticatedSession } from "@/lib/auth/types";
 import { prisma } from "@/lib/db/prisma";
 import { dateOnlyToUtc } from "@/lib/memorization-sessions/date";
+import { getJuzLabel } from "@/lib/quran/juz-metadata";
 import type { ParentReportData, ParentReportEvaluation } from "./parent-report-types";
 
 function monthRange(month: string) {
@@ -247,7 +248,7 @@ export async function getParentStudentReportData(
   if (latestOfficialExam?.scopes[0]) {
     const scope = latestOfficialExam.scopes[0];
     if (scope.type === "JUZ" && scope.juzFrom) {
-      scopeLabel = scope.juzTo && scope.juzTo !== scope.juzFrom ? `من الجزء ${scope.juzFrom} إلى ${scope.juzTo}` : `الجزء ${scope.juzFrom}`;
+      scopeLabel = scope.juzTo && scope.juzTo !== scope.juzFrom ? `من ${getJuzLabel(scope.juzFrom)} إلى ${getJuzLabel(scope.juzTo)}` : getJuzLabel(scope.juzFrom);
     } else if (scope.surahName) {
       scopeLabel = `سورة ${scope.surahName}`;
     } else if (scope.customText) {

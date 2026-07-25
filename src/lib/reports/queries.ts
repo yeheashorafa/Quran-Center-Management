@@ -62,6 +62,8 @@ function examStatusLabel(status: string): string {
   return status === "VOIDED" ? "ملغى" : "فعال";
 }
 
+import { getJuzLabel } from "@/lib/quran/juz-metadata";
+
 function scopeLabel(scope: {
   type: string;
   juzFrom: number | null;
@@ -75,8 +77,8 @@ function scopeLabel(scope: {
 }): string {
   if (scope.type === "JUZ" && scope.juzFrom) {
     return scope.juzTo && scope.juzTo !== scope.juzFrom
-      ? `من الجزء ${scope.juzFrom} إلى الجزء ${scope.juzTo}`
-      : `الجزء ${scope.juzFrom}`;
+      ? `من ${getJuzLabel(scope.juzFrom)} إلى ${getJuzLabel(scope.juzTo)}`
+      : getJuzLabel(scope.juzFrom);
   }
   if (scope.type === "SURAH" && scope.surahName) return `سورة ${scope.surahName}`;
   if (scope.type === "AYAH_RANGE" && scope.surahName) {

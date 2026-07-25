@@ -10,6 +10,7 @@ import { NetworkStatusBar } from "@/components/offline/network-status-bar";
 import { saveOfflineExaminerProfile } from "@/lib/offline/offline-profile";
 import { getExaminerDataCache, saveExaminerDataCache } from "@/lib/offline/examiner-cache";
 import { enqueueSyncItem, getAllSyncItems, processSyncQueue, type SyncQueueItem } from "@/lib/offline/sync-queue";
+import { QURAN_JUZS, getJuzLabel } from "@/lib/quran/juz-metadata";
 
 type Notice = { type: "success" | "error"; text: string } | null;
 type ExamFormState = {
@@ -310,7 +311,7 @@ export function ExaminerExamsPanel({
           pageFrom: null,
           pageTo: null,
           customText: null,
-          label: form.examType === "INDIVIDUAL" ? `الجزء ${juzFromNum}` : `من الجزء ${juzFromNum} إلى ${juzToNum}`,
+          label: form.examType === "INDIVIDUAL" ? getJuzLabel(juzFromNum) : `من ${getJuzLabel(juzFromNum)} إلى ${getJuzLabel(juzToNum)}`,
         }],
       };
 
@@ -612,8 +613,8 @@ export function ExaminerExamsPanel({
                   }))
                 }
               >
-                {Array.from({ length: 30 }, (_, index) => index + 1).map((juz) => (
-                  <option key={juz} value={juz}>{juz}</option>
+                {QURAN_JUZS.map((juz) => (
+                  <option key={juz.number} value={juz.number}>{getJuzLabel(juz.number)}</option>
                 ))}
               </select>
             </div>
@@ -626,8 +627,8 @@ export function ExaminerExamsPanel({
                   value={form.juzTo}
                   onChange={(event) => setForm((current) => ({ ...current, juzTo: event.target.value }))}
                 >
-                  {Array.from({ length: 30 }, (_, index) => index + 1).map((juz) => (
-                    <option key={juz} value={juz}>{juz}</option>
+                  {QURAN_JUZS.map((juz) => (
+                    <option key={juz.number} value={juz.number}>{getJuzLabel(juz.number)}</option>
                   ))}
                 </select>
               </div>
@@ -907,7 +908,7 @@ function PendingExamsList({
                     اختبار الطالب: <span className="text-[var(--primary)]">{payload.studentName || "طالب"}</span> ({payload.halaqaName || "حلقة"})
                   </h4>
                   <p className="text-xs font-bold text-[var(--text-muted)]">
-                    التاريخ: {payload.examDate} | الدرجة: <span className="font-black text-[var(--primary)]">{payload.score}/100</span> | النطاق: {payload.examType === "INDIVIDUAL" ? `الجزء ${payload.juzFrom}` : `من الجزء ${payload.juzFrom} إلى ${payload.juzTo}`}
+                    التاريخ: {payload.examDate} | الدرجة: <span className="font-black text-[var(--primary)]">{payload.score}/100</span> | النطاق: {payload.examType === "INDIVIDUAL" ? getJuzLabel(payload.juzFrom) : `من ${getJuzLabel(payload.juzFrom)} إلى ${getJuzLabel(payload.juzTo)}`}
                   </p>
                 </div>
 

@@ -355,15 +355,15 @@ export function TeacherSessionPanel({
 
       {/* Offline Mode Last Cache Timestamp Banner (Requirement 5) */}
       {isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine) ? (
-        <aside aria-label="شريط وضع الأوفلاين" className="rounded-2xl border border-amber-300 bg-amber-50 p-3.5 text-xs font-bold text-amber-950 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <aside aria-label="شريط وضع الأوفلاين" className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-3.5 text-xs font-bold text-[var(--status-warning-text)] shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="size-2.5 rounded-full bg-amber-500 animate-pulse" />
+            <span className="size-2.5 rounded-full bg-[var(--warning)] animate-pulse" />
             <span>
               أنت تعمل بدون إنترنت — آخر تحديث لبيانات الطلاب كان:{" "}
-              <strong className="font-black text-amber-900">{lastCacheTime || "غير محدد"}</strong>
+              <strong className="font-black text-[var(--status-warning-text)]">{lastCacheTime || "غير محدد"}</strong>
             </span>
           </div>
-          <span className="rounded-lg bg-amber-200/80 px-2.5 py-1 text-[11px] font-black text-amber-900">
+          <span className="rounded-lg border border-[var(--status-warning-border)] bg-[var(--card-bg)] px-2.5 py-1 text-[11px] font-black text-[var(--status-warning-text)]">
             PWA Offline Mode
           </span>
         </aside>
@@ -371,11 +371,11 @@ export function TeacherSessionPanel({
 
       {/* Local Draft Recovery Prompt Banner */}
       {pendingDraft ? (
-        <aside aria-label="استرجاع المسودة المحلية" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs font-bold text-amber-950 shadow-xs">
+        <aside aria-label="استرجاع المسودة المحلية" className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-4 text-xs font-bold text-[var(--status-warning-text)] shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <p className="font-black text-amber-900 text-sm">⚠️ يوجد تسميع محفوظ محلياً لهذه الجلسة لم يتم رفعه بعد!</p>
-              <p className="mt-1 text-amber-800">
+              <p className="font-black text-[var(--status-warning-text)] text-sm">⚠️ يوجد تسميع محفوظ محلياً لهذه الجلسة لم يتم رفعه بعد!</p>
+              <p className="mt-1 text-[var(--status-warning-text)] opacity-90">
                 عُثر على مسودة تسميع مخزنة محلياً على جهازك لم ترفع بعد. هل ترغب باسترجاعها أم إهمالها؟
               </p>
             </div>
@@ -383,14 +383,14 @@ export function TeacherSessionPanel({
               <button
                 type="button"
                 onClick={restoreLocalDraft}
-                className="rounded-xl bg-amber-900 px-4 py-2 text-xs font-black text-white shadow-xs hover:bg-amber-950"
+                className="rounded-xl bg-amber-700 dark:bg-amber-600 px-4 py-2 text-xs font-black text-white shadow-xs hover:bg-amber-800"
               >
                 📥 استرجاع المسودة
               </button>
               <button
                 type="button"
                 onClick={discardLocalDraft}
-                className="rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100"
+                className="rounded-xl border border-[var(--status-warning-border)] bg-[var(--card-bg)] px-3 py-2 text-xs font-bold text-[var(--status-warning-text)] hover:bg-[var(--card-soft)]"
               >
                 تجاهل
               </button>
@@ -555,7 +555,7 @@ export function TeacherSessionPanel({
                         className="flex cursor-pointer items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3">
-                          <span className="flex size-9 items-center justify-center rounded-2xl bg-emerald-50 text-sm font-black text-emerald-900">
+                          <span className="flex size-9 items-center justify-center rounded-2xl bg-[var(--card-soft)] text-sm font-black text-[var(--text-main)] border border-[var(--border-color)]">
                             {student.attendance === "PRESENT"
                               ? "✅"
                               : student.attendance === "ABSENT"
@@ -567,8 +567,8 @@ export function TeacherSessionPanel({
                                     : "⏳"}
                           </span>
                           <div>
-                            <h3 className="text-base font-black text-slate-950">{student.displayName}</h3>
-                            <p className="text-xs font-bold text-slate-500">
+                            <h3 className="text-base font-black text-[var(--text-main)]">{student.displayName}</h3>
+                            <p className="text-xs font-bold text-[var(--text-muted)]">
                               {student.attendance === "PRESENT"
                                 ? "حاضر (اضغط لإدخال السور)"
                                 : student.attendance === "ABSENT"
@@ -583,7 +583,7 @@ export function TeacherSessionPanel({
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-slate-400">
+                          <span className="text-xs font-black text-[var(--text-muted)]">
                             {isExpanded ? "▲ إغلاق" : "▼ تسجيل"}
                           </span>
                         </div>
@@ -591,7 +591,7 @@ export function TeacherSessionPanel({
 
                       {/* Accordion Body */}
                       {isExpanded ? (
-                        <div className="mt-4 border-t border-slate-100 pt-4 space-y-4">
+                        <div className="mt-4 border-t border-[var(--border-color)] pt-4 space-y-4">
                           {/* Attendance Options */}
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                             <button
@@ -599,8 +599,8 @@ export function TeacherSessionPanel({
                               onClick={() => setAttendance(student.studentId, "PRESENT")}
                               className={`rounded-2xl p-2.5 text-xs font-black transition ${
                                 student.attendance === "PRESENT"
-                                  ? "bg-emerald-900 text-white shadow-md"
-                                  : "border border-slate-200 bg-white text-slate-700 hover:bg-emerald-50"
+                                  ? "bg-emerald-600 dark:bg-emerald-600 text-white shadow-md"
+                                  : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-emerald-500/10"
                               }`}
                             >
                               حاضر
@@ -610,8 +610,8 @@ export function TeacherSessionPanel({
                               onClick={() => setAttendance(student.studentId, "NOT_HEARD")}
                               className={`rounded-2xl p-2.5 text-xs font-black transition ${
                                 student.attendance === "NOT_HEARD"
-                                  ? "bg-amber-700 text-white shadow-md"
-                                  : "border border-slate-200 bg-white text-slate-700 hover:bg-amber-50"
+                                  ? "bg-amber-600 dark:bg-amber-600 text-white shadow-md"
+                                  : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-amber-500/10"
                               }`}
                             >
                               لم يسمّع
@@ -621,8 +621,8 @@ export function TeacherSessionPanel({
                               onClick={() => setAttendance(student.studentId, "ABSENT")}
                               className={`rounded-2xl p-2.5 text-xs font-black transition ${
                                 student.attendance === "ABSENT"
-                                  ? "bg-red-700 text-white shadow-md"
-                                  : "border border-slate-200 bg-white text-slate-700 hover:bg-red-50"
+                                  ? "bg-red-600 dark:bg-red-600 text-white shadow-md"
+                                  : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-red-500/10"
                               }`}
                             >
                               غائب
@@ -632,8 +632,8 @@ export function TeacherSessionPanel({
                               onClick={() => setAttendance(student.studentId, "EXCUSED")}
                               className={`rounded-2xl p-2.5 text-xs font-black transition ${
                                 student.attendance === "EXCUSED"
-                                  ? "bg-blue-700 text-white shadow-md"
-                                  : "border border-slate-200 bg-white text-slate-700 hover:bg-blue-50"
+                                  ? "bg-blue-600 dark:bg-blue-600 text-white shadow-md"
+                                  : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-blue-500/10"
                               }`}
                             >
                               عذر
@@ -642,7 +642,7 @@ export function TeacherSessionPanel({
 
                           {/* Recitation Quran Surahs Input Area if PRESENT */}
                           {student.attendance === "PRESENT" ? (
-                            <div className="space-y-4 rounded-2xl bg-slate-50 p-4 border border-slate-200">
+                            <div className="space-y-4 rounded-2xl bg-[var(--card-soft)] p-4 border border-[var(--border-color)]">
                               {student.activities.map((activity) => (
                                 <ActivityQuranSelector
                                   key={activity.type}
@@ -675,7 +675,7 @@ export function TeacherSessionPanel({
                               type="button"
                               disabled={busyKey === `student-${student.studentId}`}
                               onClick={() => void saveStudents([student.studentId], false)}
-                              className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white hover:bg-black disabled:opacity-50"
+                              className="rounded-xl bg-[var(--primary)] px-4 py-2 text-xs font-black text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
                             >
                               {busyKey === `student-${student.studentId}` ? "جاري الحفظ..." : "حفظ بيانات هذا الطالب فقط"}
                             </button>
@@ -688,22 +688,22 @@ export function TeacherSessionPanel({
               </div>
 
               {/* Complete Session Action Footer */}
-              <div className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-emerald-200 bg-white/95 p-4 shadow-xl backdrop-blur-md">
-                <span className="text-xs font-black text-slate-800">
+              <div className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)]/95 p-4 shadow-xl backdrop-blur-md transition-colors duration-200">
+                <span className="text-xs font-black text-[var(--text-main)]">
                   تم تسجيل: {totals.present + totals.absent + totals.excused + totals.notHeard} من {students.length} طالب
                 </span>
                 <button
                   type="button"
                   disabled={busyKey === "complete-session"}
                   onClick={() => void saveStudents(students.map((s) => s.studentId), true)}
-                  className="min-h-12 rounded-2xl bg-emerald-900 px-6 text-sm font-black text-white shadow-lg transition hover:bg-emerald-950 disabled:opacity-50"
+                  className="min-h-12 rounded-2xl bg-emerald-700 dark:bg-emerald-600 px-6 text-sm font-black text-white shadow-lg transition hover:bg-emerald-800 disabled:opacity-50"
                 >
                   {busyKey === "complete-session" ? "جاري اعتماد الجلسة..." : "✅ اعتماد الجلسة بالكامل"}
                 </button>
               </div>
             </div>
           ) : (
-            <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-center text-sm font-bold text-red-900">
+            <div className="rounded-3xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-6 text-center text-sm font-bold text-[var(--status-danger-text)]">
               لا يمكن التسميع في هذا التاريخ لعدم مواءمته لجدول الحلقة.
             </div>
           )}
@@ -785,10 +785,10 @@ export function TeacherSessionPanel({
       {/* Tab 4: Parent Report Selector Tab */}
       {activeTab === "parent_report" ? (
         isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine) ? (
-          <aside className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-center text-xs font-bold text-amber-950 space-y-2">
+          <aside className="rounded-3xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-6 text-center text-xs font-bold text-[var(--status-warning-text)] space-y-2">
             <span className="text-3xl block">📄</span>
-            <h3 className="text-sm font-black text-amber-900">تقرير ولي الأمر يحتاج إلى اتّصال بالإنترنت</h3>
-            <p className="text-amber-800">
+            <h3 className="text-sm font-black text-[var(--status-warning-text)]">تقرير ولي الأمر يحتاج إلى اتّصال بالإنترنت</h3>
+            <p className="opacity-90">
               استخراج وتوليد تقرير ولي الأمر يتطلب التواصل المباشر مع السيرفر. المتاح حالياً بدون نت هو شاشة التسميع اليومية.
             </p>
           </aside>
@@ -800,10 +800,10 @@ export function TeacherSessionPanel({
       {/* Tab 5: Monthly Reports Tab */}
       {activeTab === "monthly_report" ? (
         isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine) ? (
-          <aside className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-center text-xs font-bold text-amber-950 space-y-2">
+          <aside className="rounded-3xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-6 text-center text-xs font-bold text-[var(--status-warning-text)] space-y-2">
             <span className="text-3xl block">📊</span>
-            <h3 className="text-sm font-black text-amber-900">التقرير الشهري يحتاج إلى اتّصال بالإنترنت</h3>
-            <p className="text-amber-800">
+            <h3 className="text-sm font-black text-[var(--status-warning-text)]">التقرير الشهري يحتاج إلى اتّصال بالإنترنت</h3>
+            <p className="opacity-90">
               استخراج وتوليد التقارير الشهيرة ورسوم البيانات يتطلب الاتصال بالسيرفر. المتاح حالياً بدون نت هو شاشة التسميع اليومية.
             </p>
           </aside>

@@ -294,7 +294,7 @@ export function TeacherStudentsPanel({
                     type="button"
                     disabled={busy}
                     onClick={() => handleRemoveFromHalaqa(student.studentId, student.displayName)}
-                    className="flex-1 min-h-9 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 font-extrabold text-[11px] hover:bg-amber-100 transition disabled:opacity-50"
+                    className="flex-1 min-h-9 rounded-xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] font-extrabold text-[11px] hover:opacity-90 transition disabled:opacity-50"
                   >
                     🚫 إزالة من الحلقة
                   </button>
@@ -302,7 +302,7 @@ export function TeacherStudentsPanel({
                     type="button"
                     disabled={busy}
                     onClick={() => handleDeleteTestStudent(student.studentId, student.displayName)}
-                    className="min-h-9 rounded-xl border border-red-200 bg-red-50 text-red-700 font-extrabold text-[11px] px-3 hover:bg-red-100 transition disabled:opacity-50"
+                    className="min-h-9 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] font-extrabold text-[11px] px-3 hover:opacity-90 transition disabled:opacity-50"
                     title="حذف طالب تجريبي لا يحتوي على أي سجلات"
                   >
                     🗑️ حذف تجريبي

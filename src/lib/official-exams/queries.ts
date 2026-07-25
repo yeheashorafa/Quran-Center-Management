@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { dateOnlyToUtc } from "@/lib/memorization-sessions/date";
+import { getJuzLabel } from "@/lib/quran/juz-metadata";
 import type {
   OfficialExamFilters,
   OfficialExamListItem,
@@ -23,8 +24,8 @@ function scopeLabel(scope: {
 }): string {
   if (scope.type === "JUZ" && scope.juzFrom) {
     return scope.juzTo && scope.juzTo !== scope.juzFrom
-      ? `من الجزء ${scope.juzFrom} إلى الجزء ${scope.juzTo}`
-      : `الجزء ${scope.juzFrom}`;
+      ? `من ${getJuzLabel(scope.juzFrom)} إلى ${getJuzLabel(scope.juzTo)}`
+      : getJuzLabel(scope.juzFrom);
   }
 
   if (scope.type === "SURAH" && scope.surahName) return `سورة ${scope.surahName}`;
@@ -39,6 +40,8 @@ function scopeLabel(scope: {
 
   return scope.customText || "نطاق مخصص";
 }
+
+export const formatOfficialExamScopeLabel = scopeLabel;
 
 function mapScope(scope: {
   id: string;
