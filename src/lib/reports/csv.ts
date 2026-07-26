@@ -12,118 +12,83 @@ function csvRow(cells: unknown[]): string {
 }
 
 export function renderMonthlyReportCsv(report: MonthlyReportData): Buffer {
-  const lines: string[] = [
-    // UTF-8 BOM marker for Excel Arabic compatibility
-    "\uFEFF",
-  ];
+  // UTF-8 BOM prefix (\uFEFF) ensures Excel reads Arabic characters properly
+  const lines: string[] = ["\uFEFF"];
 
-  // Title & Metadata
-  lines.push(csvRow(["عنوان التقرير", report.title]));
-  lines.push(csvRow(["الشهر", report.monthLabel]));
-  lines.push(csvRow(["النطاق", report.scopeLabel]));
-  lines.push(csvRow(["تاريخ الإصدار", report.generatedAt]));
-  lines.push(csvRow(["أُنشئ بواسطة", report.generatedBy]));
-  lines.push("");
-
-  // Summary Metrics
-  lines.push(csvRow(["ملخص الإحصائيات"]));
-  lines.push(csvRow(["البيان", "القيمة"]));
-  lines.push(csvRow(["عدد الحلقات", report.summary.halaqatCount]));
-  lines.push(csvRow(["عدد الطلاب", report.summary.studentsCount]));
-  lines.push(csvRow(["الجلسات المتوقعة", report.summary.expectedSessions]));
-  lines.push(csvRow(["الجلسات المسجلة", report.summary.recordedSessions]));
-  lines.push(csvRow(["حاضر", report.summary.present]));
-  lines.push(csvRow(["غائب", report.summary.absent]));
-  lines.push(csvRow(["عذر", report.summary.excused]));
-  lines.push(csvRow(["لم يسمع", report.summary.notHeard]));
-  lines.push(csvRow(["نسبة الحضور", `${report.summary.attendanceRate}%`]));
-  lines.push(csvRow(["صفحات الحفظ", report.summary.memorizationPages]));
-  lines.push(csvRow(["صفحات المراجعة", report.summary.reviewPages]));
-  lines.push(csvRow(["صفحات السرد", report.summary.recitationPages]));
-  lines.push(csvRow(["مجموع الصفحات", report.summary.totalPages]));
-  lines.push(csvRow(["الاختبارات الفعالة", report.summary.examCount]));
-  lines.push("");
-
-  // Detailed Students Table
-  if (report.kind === "COMPREHENSIVE") {
-    lines.push(csvRow(["سجل الطلاب التفصيلي"]));
+  if (report.kind === "EXAMS") {
+    // Official Exams CSV
+    lines.push(csvRow(["مركز سيد الشهداء حمزة"]));
+    lines.push(csvRow(["تقرير الاختبارات الرسمية", report.monthLabel]));
+    lines.push(csvRow(["النطاق / الشيخ", report.scopeLabel]));
+    lines.push("");
     lines.push(
       csvRow([
-        "المرحلة",
-        "الحلقة",
+        "#",
         "اسم الطالب",
-        "حاضر",
-        "غائب",
-        "عذر",
-        "لم يسمع",
-        "حفظ (صفحات)",
-        "مراجعة (صفحات)",
-        "سرد (صفحات)",
-        "إجمالي الصفحات",
-        "عدد الاختبارات",
-        "متوسط الاختبارات",
+        "الجزء",
+        "التاريخ",
+        "الدرجة بالكلمات",
+        "الدرجة بالأرقام",
+        "سرد / اختبار",
       ]),
     );
 
-    for (const halaqa of report.halaqat) {
-      for (const student of halaqa.students) {
-        lines.push(
-          csvRow([
-            halaqa.stageName,
-            halaqa.nameAr,
-            student.displayName,
-            student.present,
-            student.absent,
-            student.excused,
-            student.notHeard,
-            student.memorizationPages,
-            student.reviewPages,
-            student.recitationPages,
-            student.totalPages,
-            student.examCount,
-            student.examAverage ?? "—",
-          ]),
-        );
-      }
+    let seq = 1;
+    for (const exam of report.exams) {
+      lines.push(
+        csvRow([
+          seq++,
+          exam.studentName,
+          exam.scopeLabel,
+          exam.date,
+          exam.resultLabel || "—",
+          exam.score !== null ? Number(exam.score) : "—",
+          exam.examType,
+        ]),
+      );
     }
-    lines.push("");
-  }
+  } else {
+    // Monthly Achievement CSV (strictly NO exam columns)
+    const teachers = report.halaqat.flatMap((h) => h.teacherNames).filter(Boolean);
+    const teacherText = [...new Set(teachers)].join("، ") || "—";
 
-  // Official Exams Section
-  if (report.exams.length) {
-    lines.push(csvRow(["سجل الاختبارات الرسمية"]));
+    lines.push(csvRow(["اسم المحفظ", teacherText]));
+    lines.push(csvRow(["تقرير الإنجاز الشهري", report.monthLabel]));
+    lines.push(csvRow(["النطاق / الحلقة", report.scopeLabel]));
+    lines.push("");
     lines.push(
       csvRow([
-        "التاريخ",
-        "الطالب",
-        "المرحلة",
-        "الحلقة",
-        "المختبر",
-        "نوع الاختبار",
-        "النطاق",
-        "الدرجة (%)",
-        "النتيجة",
-        "الحالة",
+        "#",
+        "الاسم رباعي",
+        "بداية الحفظ (السورة)",
+        "بداية الحفظ (الآية)",
+        "نهاية الحفظ (السورة)",
+        "نهاية الحفظ (الآية)",
+        "عدد صفحات الحفظ",
+        "عدد صفحات المراجعة",
+        "عدد أجزاء السرد",
         "ملاحظات",
       ]),
     );
 
-    for (const exam of report.exams) {
-      lines.push(
-        csvRow([
-          exam.date,
-          exam.studentName,
-          exam.stageName,
-          exam.halaqaName,
-          exam.examinerName,
-          exam.examType,
-          exam.scopeLabel,
-          exam.score ?? "—",
-          exam.resultLabel,
-          exam.status,
-          exam.notes,
-        ]),
-      );
+    let seq = 1;
+    for (const halaqa of report.halaqat) {
+      for (const student of halaqa.students) {
+        lines.push(
+          csvRow([
+            seq++,
+            student.displayName,
+            student.startSurah || "—",
+            student.startAyah ?? "—",
+            student.endSurah || "—",
+            student.endAyah ?? "—",
+            Math.round(student.memorizationPages),
+            Math.round(student.reviewPages),
+            Math.round(student.sardJuzCount),
+            student.notes || "",
+          ]),
+        );
+      }
     }
   }
 

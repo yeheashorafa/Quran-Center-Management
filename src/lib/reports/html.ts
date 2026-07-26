@@ -11,8 +11,8 @@ function escapeHtml(value: unknown): string {
     .replaceAll("'", "&#039;");
 }
 
-function value(value: number | null | undefined, suffix = ""): string {
-  return value === null || value === undefined ? "—" : `${value}${suffix}`;
+function value(val: number | null | undefined, suffix = ""): string {
+  return val === null || val === undefined ? "—" : `${val}${suffix}`;
 }
 
 function summaryCards(report: MonthlyReportData): string {
@@ -32,7 +32,6 @@ function summaryCards(report: MonthlyReportData): string {
           ["صفحات الحفظ", report.summary.memorizationPages],
           ["صفحات المراجعة", report.summary.reviewPages],
           ["صفحات السرد", report.summary.recitationPages],
-          ["الاختبارات", report.summary.examCount],
         ];
 
   return `<div class="cards">${cards
@@ -43,12 +42,12 @@ function summaryCards(report: MonthlyReportData): string {
     .join("")}</div>`;
 }
 
-function halaqaSections(report: MonthlyReportData): string {
+function achievementSections(report: MonthlyReportData): string {
   return report.halaqat
     .map(
       (halaqa) => `<section class="halaqa-section">
       <div class="halaqa-heading">
-        <div><h2>${escapeHtml(halaqa.nameAr)}</h2><p>${escapeHtml(halaqa.stageName)} — الشيخ: ${escapeHtml(halaqa.teacherNames.join("، ") || "—")}</p></div>
+        <div><h2>${escapeHtml(halaqa.nameAr)}</h2><p>${escapeHtml(halaqa.stageName)} — المحفظ: ${escapeHtml(halaqa.teacherNames.join("، ") || "—")}</p></div>
         <div class="pill">حضور ${escapeHtml(halaqa.attendanceRate)}%</div>
       </div>
       <div class="mini-grid">
@@ -63,13 +62,32 @@ function halaqaSections(report: MonthlyReportData): string {
         <span>حفظ: <strong>${halaqa.memorizationPages}</strong></span>
         <span>مراجعة: <strong>${halaqa.reviewPages}</strong></span>
         <span>سرد: <strong>${halaqa.recitationPages}</strong></span>
-        <span>اختبارات: <strong>${halaqa.examCount}</strong></span>
       </div>
       <table>
-       <thead><tr><th>الطالب</th><th>حاضر</th><th>غائب</th><th>عذر</th><th>لم يسمع</th><th>حفظ</th><th>مراجعة</th><th>سرد</th><th>المجموع</th><th>الاختبارات</th><th>المتوسط</th></tr></thead>
+       <thead>
+         <tr>
+           <th>#</th>
+           <th>الاسم رباعي</th>
+           <th>بداية الحفظ</th>
+           <th>نهاية الحفظ</th>
+           <th>عدد صفحات الحفظ</th>
+           <th>عدد صفحات المراجعة</th>
+           <th>عدد الأجزاء المسرودة</th>
+           <th>ملاحظات</th>
+         </tr>
+       </thead>
        <tbody>${halaqa.students
          .map(
-           (student) => `<tr><td class="name">${escapeHtml(student.displayName)}</td><td>${student.present}</td><td>${student.absent}</td><td>${student.excused}</td><td>${student.notHeard}</td><td>${student.memorizationPages}</td><td>${student.reviewPages}</td><td>${student.recitationPages}</td><td>${student.totalPages}</td><td>${student.examCount}</td><td>${value(student.examAverage)}</td></tr>`,
+           (student, idx) => `<tr>
+             <td>${idx + 1}</td>
+             <td class="name">${escapeHtml(student.displayName)}</td>
+             <td>${student.startSurah ? `${escapeHtml(student.startSurah)} (${student.startAyah ?? 1})` : "—"}</td>
+             <td>${student.endSurah ? `${escapeHtml(student.endSurah)} (${student.endAyah ?? 1})` : "—"}</td>
+             <td>${Math.round(student.memorizationPages)}</td>
+             <td>${Math.round(student.reviewPages)}</td>
+             <td>${Math.round(student.sardJuzCount)}</td>
+             <td>${escapeHtml(student.notes || "—")}</td>
+           </tr>`,
          )
          .join("")}</tbody>
       </table>
@@ -78,16 +96,37 @@ function halaqaSections(report: MonthlyReportData): string {
     .join("");
 }
 
-function examsSection(report: MonthlyReportData): string {
+function officialExamsSection(report: MonthlyReportData): string {
   return `<section class="exam-section">
-    <h2>الاختبارات الرسمية</h2>
+    <h2>سجل الاختبارات الرسمية</h2>
     ${
       report.exams.length
-        ? `<table><thead><tr><th>التاريخ</th><th>الطالب</th><th>المرحلة</th><th>الحلقة</th><th>المختبر</th><th>النوع</th><th>النطاق</th><th>الدرجة</th><th>التقدير</th><th>الحالة</th></tr></thead><tbody>${report.exams
-            .map(
-              (exam) => `<tr><td>${escapeHtml(exam.date)}</td><td class="name">${escapeHtml(exam.studentName)}</td><td>${escapeHtml(exam.stageName)}</td><td>${escapeHtml(exam.halaqaName)}</td><td>${escapeHtml(exam.examinerName)}</td><td>${escapeHtml(exam.examType)}</td><td>${escapeHtml(exam.scopeLabel)}</td><td>${value(exam.score)}</td><td>${escapeHtml(exam.resultLabel)}</td><td>${escapeHtml(exam.status)}</td></tr>`,
-            )
-            .join("")}</tbody></table>`
+        ? `<table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>اسم الطالب</th>
+                <th>الجزء</th>
+                <th>التاريخ</th>
+                <th>الدرجة بالكلمات</th>
+                <th>الدرجة بالأرقام</th>
+                <th>سرد / اختبار</th>
+              </tr>
+            </thead>
+            <tbody>${report.exams
+              .map(
+                (exam, idx) => `<tr>
+                  <td>${idx + 1}</td>
+                  <td class="name">${escapeHtml(exam.studentName)}</td>
+                  <td>${escapeHtml(exam.scopeLabel)}</td>
+                  <td>${escapeHtml(exam.date)}</td>
+                  <td>${escapeHtml(exam.resultLabel || "—")}</td>
+                  <td>${value(exam.score)}</td>
+                  <td>${escapeHtml(exam.examType)}</td>
+                </tr>`,
+              )
+              .join("")}</tbody>
+          </table>`
         : `<p class="empty">لا توجد اختبارات ضمن الفترة والنطاق المحددين.</p>`
     }
   </section>`;
@@ -146,8 +185,7 @@ tbody tr:nth-child(even) td { background: #fbfdfb; }
   <div class="meta">مركز سيد الشهداء حمزة<br/>أُنشئ بواسطة: ${escapeHtml(report.generatedBy)}<br/>وقت الإنشاء: ${escapeHtml(generatedAt)}</div>
 </header>
 ${summaryCards(report)}
-${report.kind === "COMPREHENSIVE" ? halaqaSections(report) : ""}
-${examsSection(report)}
+${report.kind === "COMPREHENSIVE" ? achievementSections(report) : officialExamsSection(report)}
 <div class="footer">تقرير مولّد من نظام إدارة مركز التحفيظ — يحتفظ النظام بالبيانات الأصلية وسجل التعديلات.</div>
 </body></html>`;
 }

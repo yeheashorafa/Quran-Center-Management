@@ -10,10 +10,12 @@ import { DailyMonitoringPanel } from "@/components/manager/daily-monitoring-pane
 import { ManagerAlertsPanel } from "@/components/manager/manager-alerts-panel";
 import { StudentFollowUpPanel } from "@/components/manager/student-follow-up-panel";
 import { AuditLogPanel } from "@/components/manager/audit-log-panel";
+import { MonthlyReportsPanel } from "@/components/reports/monthly-reports-panel";
 import { ParentReportSelector } from "@/components/reports/parent-report-selector";
 import type { ManagerDailyMonitoringData } from "@/lib/manager-monitoring/types";
+import type { MonthlyReportOptions } from "@/lib/reports/types";
 
-type ActiveTab = "monitoring" | "alerts" | "followup" | "parent_report" | "students" | "halaqat" | "users" | "audit";
+type ActiveTab = "monitoring" | "alerts" | "followup" | "reports" | "parent_report" | "students" | "halaqat" | "users" | "audit";
 
 type ApiMessage = {
   message?: string;
@@ -55,10 +57,12 @@ async function readApiMessage(response: Response): Promise<string> {
 export function ManagementPanel({
   data,
   monitoringData,
+  reportOptions,
   initialTab = "monitoring",
 }: {
   data: ManagerDashboardData;
   monitoringData: ManagerDailyMonitoringData;
+  reportOptions?: MonthlyReportOptions;
   initialTab?: ActiveTab;
 }) {
   const router = useRouter();
@@ -351,7 +355,7 @@ export function ManagementPanel({
         <SummaryCard value={data.stats.totalUsers} label="مستخدم" />
       </div>
 
-      <div className="grid grid-cols-2 rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)] p-1 shadow-sm sm:grid-cols-4 lg:grid-cols-8">
+      <div className="grid grid-cols-3 rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)] p-1 shadow-sm sm:grid-cols-5 lg:grid-cols-9">
         <TabButton active={activeTab === "monitoring"} onClick={() => setActiveTab("monitoring")}>
           المتابعة
         </TabButton>
@@ -360,6 +364,9 @@ export function ManagementPanel({
         </TabButton>
         <TabButton active={activeTab === "followup"} onClick={() => setActiveTab("followup")}>
           متابعة الطلاب
+        </TabButton>
+        <TabButton active={activeTab === "reports"} onClick={() => setActiveTab("reports")}>
+          التقارير
         </TabButton>
         <TabButton active={activeTab === "parent_report"} onClick={() => setActiveTab("parent_report")}>
           تقرير ولي الأمر
@@ -388,13 +395,21 @@ export function ManagementPanel({
           stages={data.stages}
           halaqat={data.studentHalaqat}
         />
+      ) : activeTab === "reports" && reportOptions ? (
+        <MonthlyReportsPanel
+          options={reportOptions}
+          initialMonth={todayInputValue().slice(0, 7)}
+        />
       ) : activeTab === "parent_report" ? (
         <ParentReportSelector
-          title="تقرير ولي الأمر لكافة طلاب المركز"
-          description="استخرج تقرير المتابعة الخاص بأي طالب في المركز لشهر محدد وجاهز للطباعة مباشرة."
+          title="تنزيل تقرير ولي الأمر (PDF)"
+          description="حدد المرحلة والحلقة ثم اختر الطالب للتنزيل المباشر كملف PDF بدون معاينة."
+          stages={data.stages}
+          halaqat={data.studentHalaqat}
           students={data.students.map((s) => ({
             id: s.id,
             displayName: s.displayName,
+            halaqaId: s.activeEnrollment?.halaqa.id,
             halaqaName: s.activeEnrollment?.halaqa.nameAr,
             stageName: s.activeEnrollment?.halaqa.stageName,
           }))}

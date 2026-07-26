@@ -126,12 +126,16 @@ function initialStudentRow(studentId: string, displayName: string): StudentMonth
     excused: 0,
     notHeard: 0,
     pending: 0,
+    startSurah: null,
+    startAyah: null,
+    endSurah: null,
+    endAyah: null,
     memorizationPages: 0,
     reviewPages: 0,
     recitationPages: 0,
+    sardJuzCount: 0,
     totalPages: 0,
-    examCount: 0,
-    examAverage: null,
+    notes: null,
   };
 }
 
@@ -285,8 +289,19 @@ export async function getMonthlyReportData(
           items: {
             select: {
               attendance: true,
+              notes: true,
               student: { select: { id: true, displayName: true } },
-              activities: { select: { type: true, pageCount: true } },
+              activities: {
+                orderBy: { orderNo: "asc" },
+                select: {
+                  type: true,
+                  surahName: true,
+                  fromAyah: true,
+                  toAyah: true,
+                  pageCount: true,
+                  notes: true,
+                },
+              },
             },
           },
         },
@@ -342,15 +357,6 @@ export async function getMonthlyReportData(
       })
     : [];
 
-  const examsByHalaqa = new Map<string, typeof exams>();
-  for (const exam of exams) {
-    const halaqaId = exam.enrollment?.halaqa.id;
-    if (!halaqaId) continue;
-    const list = examsByHalaqa.get(halaqaId) ?? [];
-    list.push(exam);
-    examsByHalaqa.set(halaqaId, list);
-  }
-
   const reportHalaqat: HalaqaMonthlyReport[] = halaqat.map((halaqa) => {
     const students = new Map<string, StudentMonthlyReportRow>();
     for (const enrollment of halaqa.enrollments) {
@@ -393,11 +399,23 @@ export async function getMonthlyReportData(
           row.pending += 1;
         }
 
+        if (item.notes && !row.notes) {
+          row.notes = item.notes;
+        }
+
         for (const activity of item.activities) {
           const pages = Number(activity.pageCount);
           if (activity.type === "MEMORIZATION") {
             memorizationPages += pages;
             row.memorizationPages += pages;
+            if (activity.surahName) {
+              if (!row.startSurah) {
+                row.startSurah = activity.surahName;
+                row.startAyah = activity.fromAyah ?? null;
+              }
+              row.endSurah = activity.surahName;
+              row.endAyah = activity.toAyah ?? null;
+            }
           } else if (activity.type === "REVIEW") {
             reviewPages += pages;
             row.reviewPages += pages;
@@ -406,30 +424,11 @@ export async function getMonthlyReportData(
             row.recitationPages += pages;
           }
           row.totalPages += pages;
+          if (activity.notes && !row.notes) {
+            row.notes = activity.notes;
+          }
         }
       }
-    }
-
-    const halaqaExams = examsByHalaqa.get(halaqa.id) ?? [];
-    const activeScores: number[] = [];
-    const studentScores = new Map<string, number[]>();
-    for (const exam of halaqaExams) {
-      if (exam.status !== "ACTIVE") continue;
-      const score = exam.score === null ? null : Number(exam.score);
-      const row = students.get(exam.student.id) ?? initialStudentRow(exam.student.id, exam.student.displayName);
-      students.set(exam.student.id, row);
-      row.examCount += 1;
-      if (score !== null) {
-        activeScores.push(score);
-        const scores = studentScores.get(exam.student.id) ?? [];
-        scores.push(score);
-        studentScores.set(exam.student.id, scores);
-      }
-    }
-
-    for (const [studentId, scores] of studentScores) {
-      const row = students.get(studentId);
-      if (row) row.examAverage = average(scores);
     }
 
     const expectedSessionDates = expectedDates(range.start, range.end, halaqa.schedules);
@@ -447,6 +446,7 @@ export async function getMonthlyReportData(
         memorizationPages: round2(row.memorizationPages),
         reviewPages: round2(row.reviewPages),
         recitationPages: round2(row.recitationPages),
+        sardJuzCount: round2(row.recitationPages / 20),
         totalPages: round2(row.totalPages),
       }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName, "ar"));
@@ -471,8 +471,6 @@ export async function getMonthlyReportData(
       reviewPages: round2(reviewPages),
       recitationPages: round2(recitationPages),
       totalPages: round2(memorizationPages + reviewPages + recitationPages),
-      examCount: halaqaExams.filter((exam) => exam.status === "ACTIVE").length,
-      examAverage: average(activeScores),
       students: mappedStudents,
     };
   });

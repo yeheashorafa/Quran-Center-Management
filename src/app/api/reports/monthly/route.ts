@@ -63,7 +63,11 @@ export async function GET(request: NextRequest) {
       return errorResponse("لا توجد حلقات متاحة ضمن الشهر والنطاق المحددين.", 404);
     }
 
-    const baseName = safeName(`${report.title}_${parsed.data.month}_${report.scopeLabel}`);
+    const baseTitle =
+      parsed.data.kind === "EXAMS"
+        ? `تقرير_الاختبارات_الرسمية_${parsed.data.month}`
+        : `تقرير_الإنجاز_الشهري_${report.scopeLabel}_${parsed.data.month}`;
+    const baseName = safeName(baseTitle);
     let body: Buffer;
     let contentType: string;
     let filename: string;
@@ -77,9 +81,9 @@ export async function GET(request: NextRequest) {
       contentType = "text/csv; charset=utf-8";
       filename = `${baseName}.csv`;
     } else {
-      body = renderMonthlyReportExcel(report);
-      contentType = "application/vnd.ms-excel; charset=utf-8";
-      filename = `${baseName}.xml`;
+      body = await renderMonthlyReportExcel(report);
+      contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      filename = `${baseName}.xlsx`;
     }
 
     await prisma.auditLog.create({

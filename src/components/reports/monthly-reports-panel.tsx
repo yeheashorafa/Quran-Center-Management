@@ -9,32 +9,6 @@ import type {
 
 type ApiMessage = { message?: string };
 
-function roleText(roleCode: MonthlyReportOptions["roleCode"]): {
-  eyebrow: string;
-  title: string;
-  description: string;
-} {
-  if (roleCode === "TEACHER") {
-    return {
-      eyebrow: "تقارير الشيخ",
-      title: "التقرير الشهري للحلقات",
-      description: "تقرير الحضور والإنجاز والاختبارات للحلقات المعيّن عليها خلال شهر محدد.",
-    };
-  }
-  if (roleCode === "EXAMINER") {
-    return {
-      eyebrow: "تقارير المختبر",
-      title: "تقرير الاختبارات الرسمية",
-      description: "تصدير سجل الاختبارات الرسمي حسب الشهر والمرحلة والحلقة.",
-    };
-  }
-  return {
-    eyebrow: "تقارير المركز",
-    title: "التقارير الشهرية",
-    description: "تقرير شامل للمركز أو تقرير مستقل للاختبارات مع تصفية المرحلة والحلقة.",
-  };
-}
-
 function filenameFromHeader(header: string | null, fallback: string): string {
   if (!header) return fallback;
   const encoded = header.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
@@ -61,38 +35,50 @@ export function MonthlyReportsPanel({
   options: MonthlyReportOptions;
   initialMonth: string;
 }) {
-  const content = roleText(options.roleCode);
-  const [month, setMonth] = useState(initialMonth);
-  const [kind, setKind] = useState<ReportKind>(options.defaultKind);
-  const [stageId, setStageId] = useState("");
-  const [halaqaId, setHalaqaId] = useState("");
+  const [achieveMonth, setAchieveMonth] = useState(initialMonth);
+  const [achieveStageId, setAchieveStageId] = useState("");
+  const [achieveHalaqaId, setAchieveHalaqaId] = useState("");
+
+  const [examMonth, setExamMonth] = useState(initialMonth);
+  const [examStageId, setExamStageId] = useState("");
+  const [examHalaqaId, setExamHalaqaId] = useState("");
   const [includeVoided, setIncludeVoided] = useState(false);
-  const [busy, setBusy] = useState<ReportFormat | null>(null);
+
+  const [busy, setBusy] = useState<{ kind: ReportKind; format: ReportFormat } | null>(null);
   const [notice, setNotice] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
-  const halaqat = useMemo(() => {
-    const stages = stageId ? options.stages.filter((stage) => stage.id === stageId) : options.stages;
-    return stages.flatMap((stage) => stage.halaqat);
-  }, [options.stages, stageId]);
+  const achieveHalaqat = useMemo(() => {
+    const stages = achieveStageId
+      ? options.stages.filter((s) => s.id === achieveStageId)
+      : options.stages;
+    return stages.flatMap((s) => s.halaqat);
+  }, [options.stages, achieveStageId]);
 
-  function changeStage(value: string) {
-    setStageId(value);
-    setHalaqaId("");
-  }
+  const examHalaqat = useMemo(() => {
+    const stages = examStageId
+      ? options.stages.filter((s) => s.id === examStageId)
+      : options.stages;
+    return stages.flatMap((s) => s.halaqat);
+  }, [options.stages, examStageId]);
 
-  async function download(format: ReportFormat) {
+  async function downloadReport(kind: ReportKind, format: ReportFormat) {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       setNotice({ type: "error", text: "التقارير والتصدير تحتاج اتصالاً بالإنترنت." });
       return;
     }
+
+    const month = kind === "COMPREHENSIVE" ? achieveMonth : examMonth;
+    const stageId = kind === "COMPREHENSIVE" ? achieveStageId : examStageId;
+    const halaqaId = kind === "COMPREHENSIVE" ? achieveHalaqaId : examHalaqaId;
 
     if (!month) {
       setNotice({ type: "error", text: "اختر الشهر أولاً." });
       return;
     }
 
-    setBusy(format);
+    setBusy({ kind, format });
     setNotice(null);
+
     try {
       const params = new URLSearchParams({
         month,
@@ -108,11 +94,14 @@ export function MonthlyReportsPanel({
         credentials: "same-origin",
         cache: "no-store",
       });
+
       if (!response.ok) throw new Error(await apiError(response));
 
       const blob = await response.blob();
-      const fallback = `تقرير_${month}.${format === "pdf" ? "pdf" : "xml"}`;
+      const ext = format === "pdf" ? "pdf" : format === "csv" ? "csv" : "xlsx";
+      const fallback = `${kind === "COMPREHENSIVE" ? "تقرير_الإنجاز" : "تقرير_الاختبارات"}_${month}.${ext}`;
       const filename = filenameFromHeader(response.headers.get("content-disposition"), fallback);
+
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -121,6 +110,7 @@ export function MonthlyReportsPanel({
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+
       setNotice({ type: "success", text: "تم تجهيز التقرير وتنزيله بنجاح." });
     } catch (error) {
       setNotice({
@@ -132,22 +122,14 @@ export function MonthlyReportsPanel({
     }
   }
 
-  return (
-    <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200" dir="rtl">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-bold text-[var(--gold)]">{content.eyebrow}</p>
-          <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">{content.title}</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">{content.description}</p>
-        </div>
-        <div className="rounded-2xl bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-2 text-xs font-bold text-[var(--primary)]">
-          Excel + PDF
-        </div>
-      </div>
+  const allowAchievement = options.allowedKinds.includes("COMPREHENSIVE");
+  const allowExams = options.allowedKinds.includes("EXAMS");
 
+  return (
+    <div className="space-y-6" dir="rtl">
       {notice ? (
         <div
-          className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
+          className={`rounded-2xl border px-4 py-3 text-sm font-bold ${
             notice.type === "success"
               ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
               : "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]"
@@ -157,107 +139,218 @@ export function MonthlyReportsPanel({
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <label className="form-label" htmlFor={`report-month-${options.roleCode}`}>الشهر</label>
-          <input
-            className="form-control"
-            id={`report-month-${options.roleCode}`}
-            type="month"
-            value={month}
-            onChange={(event) => setMonth(event.target.value)}
-          />
-        </div>
-
-        {options.allowedKinds.length > 1 ? (
-          <div>
-            <label className="form-label" htmlFor="report-kind">نوع التقرير</label>
-            <select
-              className="form-control"
-              id="report-kind"
-              value={kind}
-              onChange={(event) => setKind(event.target.value as ReportKind)}
-            >
-              <option value="COMPREHENSIVE">التقرير الشامل</option>
-              <option value="EXAMS">الاختبارات الرسمية</option>
-            </select>
+      {/* Section A: Monthly Achievement Report */}
+      {allowAchievement ? (
+        <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-5 shadow-sm text-[var(--text-main)] transition-colors duration-200">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <span className="text-xs font-bold text-[var(--gold)]">أ. التقرير الأساسي</span>
+              <h2 className="text-xl font-black text-[var(--text-main)]">تقرير الإنجاز الشهري</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
+                تصدير إنجاز حفظ ومراجعة وسرد الطلاب مع تفاصيل سور وآيات الحفظ فقط (بدون بيانات الاختبارات).
+              </p>
+            </div>
+            <div className="rounded-2xl bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1.5 text-xs font-bold text-[var(--primary)]">
+              إنجاز الحفظ فقط
+            </div>
           </div>
-        ) : null}
 
-        <div>
-          <label className="form-label" htmlFor={`report-stage-${options.roleCode}`}>المرحلة</label>
-          <select
-            className="form-control"
-            id={`report-stage-${options.roleCode}`}
-            value={stageId}
-            onChange={(event) => changeStage(event.target.value)}
-          >
-            <option value="">كل المراحل</option>
-            {options.stages.map((stage) => (
-              <option key={stage.id} value={stage.id}>{stage.nameAr}</option>
-            ))}
-          </select>
-        </div>
+          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="form-label" htmlFor="achieve-month">الشهر</label>
+              <input
+                id="achieve-month"
+                className="form-control font-bold"
+                type="month"
+                value={achieveMonth}
+                onChange={(e) => setAchieveMonth(e.target.value)}
+              />
+            </div>
 
-        <div>
-          <label className="form-label" htmlFor={`report-halaqa-${options.roleCode}`}>الحلقة</label>
-          <select
-            className="form-control"
-            id={`report-halaqa-${options.roleCode}`}
-            value={halaqaId}
-            onChange={(event) => setHalaqaId(event.target.value)}
-          >
-            <option value="">كل الحلقات المتاحة</option>
-            {halaqat.map((halaqa) => (
-              <option key={halaqa.id} value={halaqa.id}>
-                {halaqa.nameAr}{halaqa.teacherName ? ` — ${halaqa.teacherName}` : ""}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+            <div>
+              <label className="form-label" htmlFor="achieve-stage">المرحلة</label>
+              <select
+                id="achieve-stage"
+                className="form-control font-bold"
+                value={achieveStageId}
+                onChange={(e) => {
+                  setAchieveStageId(e.target.value);
+                  setAchieveHalaqaId("");
+                }}
+              >
+                <option value="">كل المراحل</option>
+                {options.stages.map((stage) => (
+                  <option key={stage.id} value={stage.id}>{stage.nameAr}</option>
+                ))}
+              </select>
+            </div>
 
-      {kind === "EXAMS" && options.roleCode !== "TEACHER" ? (
-        <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm font-bold text-[var(--text-main)]">
-          <input
-            type="checkbox"
-            checked={includeVoided}
-            onChange={(event) => setIncludeVoided(event.target.checked)}
-          />
-          تضمين الاختبارات الملغاة في التقرير
-        </label>
+            <div>
+              <label className="form-label" htmlFor="achieve-halaqa">الحلقة / الشيخ</label>
+              <select
+                id="achieve-halaqa"
+                className="form-control font-bold"
+                value={achieveHalaqaId}
+                onChange={(e) => setAchieveHalaqaId(e.target.value)}
+              >
+                <option value="">كل الحلقات</option>
+                {achieveHalaqat.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.nameAr}{h.teacherName ? ` — ${h.teacherName}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <button
+              type="button"
+              className="rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-black text-white transition hover:bg-[var(--primary-dark)] disabled:opacity-60"
+              disabled={busy !== null}
+              onClick={() => downloadReport("COMPREHENSIVE", "excel")}
+            >
+              {busy?.kind === "COMPREHENSIVE" && busy?.format === "excel"
+                ? "جاري تجهيز Excel..."
+                : "📊 تنزيل Excel الإنجاز (.xlsx)"}
+            </button>
+
+            <button
+              type="button"
+              className="rounded-2xl border-2 border-[var(--primary)] bg-[var(--card-soft)] px-4 py-3 text-sm font-black text-[var(--primary)] transition hover:opacity-90 disabled:opacity-60"
+              disabled={busy !== null}
+              onClick={() => downloadReport("COMPREHENSIVE", "csv")}
+            >
+              {busy?.kind === "COMPREHENSIVE" && busy?.format === "csv"
+                ? "جاري تجهيز CSV..."
+                : "📄 تنزيل CSV الإنجاز (UTF-8)"}
+            </button>
+
+            <button
+              type="button"
+              className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)] px-4 py-3 text-sm font-black text-[var(--text-main)] transition hover:border-[var(--primary)] disabled:opacity-60"
+              disabled={busy !== null}
+              onClick={() => downloadReport("COMPREHENSIVE", "pdf")}
+            >
+              {busy?.kind === "COMPREHENSIVE" && busy?.format === "pdf"
+                ? "جاري تجهيز PDF..."
+                : "🖨️ تنزيل PDF الإنجاز"}
+            </button>
+          </div>
+        </section>
       ) : null}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <button
-          type="button"
-          className="rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-black text-white transition hover:bg-[var(--primary-dark)] disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={busy !== null}
-          onClick={() => download("excel")}
-        >
-          {busy === "excel" ? "جاري تجهيز Excel..." : "📊 تصدير Excel"}
-        </button>
-        <button
-          type="button"
-          className="rounded-2xl border-2 border-[var(--primary)] bg-[var(--card-soft)] px-4 py-3 text-sm font-black text-[var(--primary)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={busy !== null}
-          onClick={() => download("csv")}
-        >
-          {busy === "csv" ? "جاري تجهيز CSV..." : "📄 تصدير CSV (UTF-8)"}
-        </button>
-        <button
-          type="button"
-          className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)] px-4 py-3 text-sm font-black text-[var(--text-main)] transition hover:border-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={busy !== null}
-          onClick={() => download("pdf")}
-        >
-          {busy === "pdf" ? "جاري تجهيز PDF..." : "🖨️ تصدير PDF"}
-        </button>
-      </div>
+      {/* Section B: Official Tests Report */}
+      {allowExams ? (
+        <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-5 shadow-sm text-[var(--text-main)] transition-colors duration-200">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <span className="text-xs font-bold text-[var(--gold)]">ب. تقرير الاختبارات</span>
+              <h2 className="text-xl font-black text-[var(--text-main)]">تقرير الاختبارات الرسمية</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
+                تصدير سجل الاختبارات والسرد الرسمي بشكل منفصل تماماً عن متابعة الحفظ اليومية.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1.5 text-xs font-bold text-[var(--primary)]">
+              تقرير الاختبارات مستقل
+            </div>
+          </div>
 
-      <p className="mt-3 text-xs leading-6 text-[var(--text-muted)]">
-        ملف Excel يُنشأ بصيغة Spreadsheet XML المتوافقة مع Microsoft Excel، وملف PDF يُنشأ على الخادم من قالب عربي جاهز للطباعة.
-      </p>
-    </section>
+          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="form-label" htmlFor="exam-month">الشهر</label>
+              <input
+                id="exam-month"
+                className="form-control font-bold"
+                type="month"
+                value={examMonth}
+                onChange={(e) => setExamMonth(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="form-label" htmlFor="exam-stage">المرحلة</label>
+              <select
+                id="exam-stage"
+                className="form-control font-bold"
+                value={examStageId}
+                onChange={(e) => {
+                  setExamStageId(e.target.value);
+                  setExamHalaqaId("");
+                }}
+              >
+                <option value="">كل المراحل</option>
+                {options.stages.map((stage) => (
+                  <option key={stage.id} value={stage.id}>{stage.nameAr}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="form-label" htmlFor="exam-halaqa">الحلقة / الشيخ</label>
+              <select
+                id="exam-halaqa"
+                className="form-control font-bold"
+                value={examHalaqaId}
+                onChange={(e) => setExamHalaqaId(e.target.value)}
+              >
+                <option value="">كل الحلقات والمختبرين</option>
+                {examHalaqat.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.nameAr}{h.teacherName ? ` — ${h.teacherName}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {options.roleCode !== "TEACHER" ? (
+            <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm font-bold text-[var(--text-main)]">
+              <input
+                type="checkbox"
+                checked={includeVoided}
+                onChange={(e) => setIncludeVoided(e.target.checked)}
+              />
+              تضمين الاختبارات الملغاة في التقرير
+            </label>
+          ) : null}
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <button
+              type="button"
+              className="rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-black text-white transition hover:bg-[var(--primary-dark)] disabled:opacity-60"
+              disabled={busy !== null}
+              onClick={() => downloadReport("EXAMS", "excel")}
+            >
+              {busy?.kind === "EXAMS" && busy?.format === "excel"
+                ? "جاري تجهيز Excel..."
+                : "📊 تنزيل Excel الاختبارات (.xlsx)"}
+            </button>
+
+            <button
+              type="button"
+              className="rounded-2xl border-2 border-[var(--primary)] bg-[var(--card-soft)] px-4 py-3 text-sm font-black text-[var(--primary)] transition hover:opacity-90 disabled:opacity-60"
+              disabled={busy !== null}
+              onClick={() => downloadReport("EXAMS", "csv")}
+            >
+              {busy?.kind === "EXAMS" && busy?.format === "csv"
+                ? "جاري تجهيز CSV..."
+                : "📄 تنزيل CSV الاختبارات (UTF-8)"}
+            </button>
+
+            <button
+              type="button"
+              className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)] px-4 py-3 text-sm font-black text-[var(--text-main)] transition hover:border-[var(--primary)] disabled:opacity-60"
+              disabled={busy !== null}
+              onClick={() => downloadReport("EXAMS", "pdf")}
+            >
+              {busy?.kind === "EXAMS" && busy?.format === "pdf"
+                ? "جاري تجهيز PDF..."
+                : "🖨️ تنزيل PDF الاختبارات"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+    </div>
   );
 }

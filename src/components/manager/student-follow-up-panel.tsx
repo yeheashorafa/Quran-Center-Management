@@ -9,9 +9,6 @@ import type {
   StudentFollowUpData,
 } from "@/lib/student-follow-up/types";
 
-import { ParentReportModal } from "@/components/reports/parent-report-modal";
-import type { ParentReportData } from "@/lib/reports/parent-report-types";
-
 const SEVERITY_STYLES: Record<FollowUpSeverity, string> = {
   HIGH: "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]",
   MEDIUM: "border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]",
@@ -51,24 +48,6 @@ export function StudentFollowUpPanel({
   const [data, setData] = useState<StudentFollowUpData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [activeParentReport, setActiveParentReport] = useState<ParentReportData | null>(null);
-  const [fetchingReportId, setFetchingReportId] = useState<string | null>(null);
-
-  async function openParentReport(studentId: string) {
-    setFetchingReportId(studentId);
-    try {
-      const month = to.slice(0, 7);
-      const response = await fetch(`/api/reports/parent?studentId=${studentId}&month=${month}`);
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(json.message || "تعذر فتح تقرير ولي الأمر.");
-      setActiveParentReport(json.data as ParentReportData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "حدث خطأ أثناء فتح التقرير.");
-    } finally {
-      setFetchingReportId(null);
-    }
-  }
 
   const visibleHalaqatList = useMemo(() => {
     if (!stageId) return halaqat;
@@ -185,14 +164,6 @@ export function StudentFollowUpPanel({
                   {student.parentPhone ? <p className="mt-1 text-xs font-bold text-[var(--text-muted)]" dir="ltr">{student.parentPhone}</p> : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={fetchingReportId === student.studentId}
-                    onClick={() => openParentReport(student.studentId)}
-                    className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-3 py-2 text-xs font-black text-[var(--primary)] transition hover:bg-[var(--primary)] hover:text-white disabled:opacity-50"
-                  >
-                    {fetchingReportId === student.studentId ? "جاري..." : "📜 تقرير ولي الأمر"}
-                  </button>
                   <a href={`/manager/students/${student.studentId}`} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-xs font-black text-white hover:bg-[var(--primary-dark)]">فتح ملف الطالب</a>
                 </div>
               </div>
@@ -223,10 +194,6 @@ export function StudentFollowUpPanel({
           <div className="rounded-3xl border border-dashed border-[var(--status-success-border)] bg-[var(--status-success-bg)] p-8 text-center text-sm font-black text-[var(--status-success-text)]">لا يوجد طلاب تنطبق عليهم قواعد المتابعة في الفترة المحددة.</div>
         )}
       </section>
-
-      {activeParentReport ? (
-        <ParentReportModal data={activeParentReport} onClose={() => setActiveParentReport(null)} />
-      ) : null}
     </div>
   );
 }

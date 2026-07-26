@@ -1,6 +1,5 @@
 import { OfficialExamsReadonlyPanel } from "@/components/exams/official-exams-readonly-panel";
 import { ManagementPanel } from "@/components/manager/management-panel";
-import { MonthlyReportsPanel } from "@/components/reports/monthly-reports-panel";
 import { requireRole } from "@/lib/auth/session";
 import { getManagerDashboardData } from "@/lib/manager/queries";
 import { getManagerDailyMonitoringData } from "@/lib/manager-monitoring/queries";
@@ -26,6 +25,7 @@ export default async function ManagerDashboardPage({
     "monitoring",
     "alerts",
     "followup",
+    "reports",
     "parent_report",
     "students",
     "halaqat",
@@ -46,10 +46,11 @@ export default async function ManagerDashboardPage({
         </p>
       </div>
 
-      <ManagementPanel data={data} monitoringData={monitoringData} initialTab={initialTab} />
-      <MonthlyReportsPanel
-        options={reportOptions}
-        initialMonth={todayInPalestine().slice(0, 7)}
+      <ManagementPanel
+        data={data}
+        monitoringData={monitoringData}
+        reportOptions={reportOptions}
+        initialTab={initialTab}
       />
       <OfficialExamsReadonlyPanel
         title="آخر اختبارات المركز"

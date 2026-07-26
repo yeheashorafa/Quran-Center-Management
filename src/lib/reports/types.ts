@@ -40,12 +40,16 @@ export type StudentMonthlyReportRow = {
   excused: number;
   notHeard: number;
   pending: number;
+  startSurah: string | null;
+  startAyah: number | null;
+  endSurah: string | null;
+  endAyah: number | null;
   memorizationPages: number;
   reviewPages: number;
   recitationPages: number;
+  sardJuzCount: number;
   totalPages: number;
-  examCount: number;
-  examAverage: number | null;
+  notes: string | null;
 };
 
 export type MonthlyExamReportRow = {
@@ -83,8 +87,6 @@ export type HalaqaMonthlyReport = {
   reviewPages: number;
   recitationPages: number;
   totalPages: number;
-  examCount: number;
-  examAverage: number | null;
   students: StudentMonthlyReportRow[];
 };
 
