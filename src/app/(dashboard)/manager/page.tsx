@@ -1,4 +1,3 @@
-import { OfficialExamsReadonlyPanel } from "@/components/exams/official-exams-readonly-panel";
 import { ManagementPanel } from "@/components/manager/management-panel";
 import { requireRole } from "@/lib/auth/session";
 import { getManagerDashboardData } from "@/lib/manager/queries";
@@ -25,6 +24,7 @@ export default async function ManagerDashboardPage({
     "monitoring",
     "alerts",
     "followup",
+    "exams",
     "reports",
     "parent_report",
     "students",
@@ -50,12 +50,8 @@ export default async function ManagerDashboardPage({
         data={data}
         monitoringData={monitoringData}
         reportOptions={reportOptions}
+        officialExams={officialExams}
         initialTab={initialTab}
-      />
-      <OfficialExamsReadonlyPanel
-        title="آخر اختبارات المركز"
-        description="عرض إداري لأحدث الاختبارات الرسمية المسجلة في جميع الحلقات."
-        exams={officialExams}
       />
     </section>
   );

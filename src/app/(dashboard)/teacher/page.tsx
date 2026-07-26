@@ -1,4 +1,3 @@
-import { OfficialExamsReadonlyPanel } from "@/components/exams/official-exams-readonly-panel";
 import { TeacherSessionPanel } from "@/components/sessions/teacher-session-panel";
 import { requireRole } from "@/lib/auth/session";
 import { todayInPalestine } from "@/lib/memorization-sessions/date";
@@ -15,17 +14,11 @@ export default async function TeacherDashboardPage() {
   ]);
 
   return (
-    <>
-      <TeacherSessionPanel
-        dashboard={dashboard}
-        initialHalaqaId={dashboard.halaqat[0]?.id || ""}
-        initialDate={todayInPalestine()}
-      />
-      <OfficialExamsReadonlyPanel
-        title="آخر نتائج طلاب حلقاتك"
-        description="يعرض الشيخ النتائج الرسمية المسجلة لطلاب الحلقات المعيّن عليها دون صلاحية التعديل."
-        exams={officialExams}
-      />
-    </>
+    <TeacherSessionPanel
+      dashboard={dashboard}
+      officialExams={officialExams}
+      initialHalaqaId={dashboard.halaqat[0]?.id || ""}
+      initialDate={todayInPalestine()}
+    />
   );
 }

@@ -44,6 +44,28 @@ export function DailyMonitoringPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [exportingFormat, setExportingFormat] = useState<"excel" | "csv" | null>(null);
+
+  function downloadExport(format: "excel" | "csv") {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setError("التقارير والتصدير تحتاج اتصالاً بالإنترنت.");
+      return;
+    }
+
+    setExportingFormat(format);
+    setError(null);
+
+    const url = `/api/manager/monitoring?date=${encodeURIComponent(date)}&format=${format}`;
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `تقرير_متابعة_الحلقات_${date}.${format === "excel" ? "xlsx" : "csv"}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+
+    setTimeout(() => setExportingFormat(null), 1500);
+  }
+
   async function loadDate(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     setLoading(true);
@@ -92,25 +114,45 @@ export function DailyMonitoringPanel({
             </p>
           </div>
 
-          <form className="flex w-full gap-2 sm:w-auto" onSubmit={loadDate}>
-            <div className="min-w-0 flex-1 sm:w-52">
-              <label className="sr-only" htmlFor="monitoring-date">التاريخ</label>
-              <input
-                className="form-control"
-                id="monitoring-date"
-                type="date"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
-                required
-              />
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <form className="flex w-full gap-2 sm:w-auto" onSubmit={loadDate}>
+              <div className="min-w-0 flex-1 sm:w-44">
+                <label className="sr-only" htmlFor="monitoring-date">التاريخ</label>
+                <input
+                  className="form-control"
+                  id="monitoring-date"
+                  type="date"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  required
+                />
+              </div>
+              <button
+                className="min-h-12 shrink-0 rounded-2xl bg-[var(--primary)] px-5 text-sm font-black text-white transition hover:bg-[var(--primary-dark)] disabled:opacity-60"
+                disabled={loading}
+              >
+                {loading ? "جاري التحميل..." : "عرض"}
+              </button>
+            </form>
+
             <button
-              className="min-h-12 shrink-0 rounded-2xl bg-[var(--primary)] px-5 text-sm font-black text-white transition hover:bg-[var(--primary-dark)] disabled:opacity-60"
-              disabled={loading}
+              type="button"
+              className="min-h-12 rounded-2xl bg-[var(--primary)] px-4 text-xs font-black text-white transition hover:bg-[var(--primary-dark)] disabled:opacity-60"
+              disabled={exportingFormat !== null}
+              onClick={() => downloadExport("excel")}
             >
-              {loading ? "جاري التحميل..." : "عرض"}
+              {exportingFormat === "excel" ? "جاري التنزيل..." : "📊 Excel المتابعة (.xlsx)"}
             </button>
-          </form>
+
+            <button
+              type="button"
+              className="min-h-12 rounded-2xl border-2 border-[var(--primary)] bg-[var(--card-soft)] px-4 text-xs font-black text-[var(--primary)] transition hover:opacity-90 disabled:opacity-60"
+              disabled={exportingFormat !== null}
+              onClick={() => downloadExport("csv")}
+            >
+              {exportingFormat === "csv" ? "جاري التنزيل..." : "📄 CSV المتابعة (UTF-8)"}
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 rounded-2xl bg-[var(--card-soft)] border border-[var(--border-color)] px-4 py-3 text-sm font-bold text-[var(--primary)]">

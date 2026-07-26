@@ -12,6 +12,8 @@ import { enqueueSyncItem, getAllSyncItems, type SyncQueueItem } from "@/lib/offl
 import { getTeacherDataCache, saveTeacherDataCache } from "@/lib/offline/teacher-cache";
 import { getOfflineTeacherProfile, saveOfflineTeacherProfile } from "@/lib/offline/offline-profile";
 import { PendingSessionsList } from "@/components/offline/pending-sessions-list";
+import { TeacherExamsPanel } from "@/components/teacher/teacher-exams-panel";
+import type { OfficialExamListItem } from "@/lib/official-exams/types";
 import type {
   SessionActivityCode,
   SessionAttendanceCode,
@@ -59,12 +61,14 @@ export function TeacherSessionPanel({
   dashboard,
   initialHalaqaId,
   initialDate,
+  officialExams = [],
 }: {
   dashboard: TeacherSessionDashboardData;
   initialHalaqaId: string;
   initialDate: string;
+  officialExams?: OfficialExamListItem[];
 }) {
-  const [activeTab, setActiveTab] = useState<"recitation" | "students" | "history" | "parent_report" | "monthly_report">("recitation");
+  const [activeTab, setActiveTab] = useState<"recitation" | "students" | "history" | "exams" | "parent_report" | "monthly_report">("recitation");
   const [halaqaId, setHalaqaId] = useState(initialHalaqaId);
   const [sessionDate, setSessionDate] = useState(initialDate);
   const [editor, setEditor] = useState<TeacherSessionEditorData | null>(null);
@@ -74,6 +78,9 @@ export function TeacherSessionPanel({
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
 
+  // Client mount state for hydration mismatch prevention
+  const [isMounted, setIsMounted] = useState<boolean>(false);
+
   // Offline status & cache metadata
   const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
   const [isClientOffline, setIsClientOffline] = useState<boolean>(false);
@@ -82,7 +89,10 @@ export function TeacherSessionPanel({
   useEffect(() => {
     let active = true;
     queueMicrotask(() => {
-      if (active) setIsClientOffline(typeof navigator !== "undefined" && !navigator.onLine);
+      if (active) {
+        setIsMounted(true);
+        setIsClientOffline(typeof navigator !== "undefined" && !navigator.onLine);
+      }
     });
     function handleOnline() { if (active) setIsClientOffline(false); }
     function handleOffline() { if (active) setIsClientOffline(true); }
@@ -367,6 +377,42 @@ export function TeacherSessionPanel({
 
   return (
     <div className="space-y-6" dir="rtl">
+      {/* Teacher Welcome Banner Card */}
+      <section className="rounded-3xl bg-gradient-to-l from-emerald-950 to-emerald-700 p-5 text-white shadow-lg shadow-emerald-950/10 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-bold text-emerald-100">لوحة المحفظ والشيخ</p>
+            <h1 className="mt-1 text-2xl font-black sm:text-3xl">
+              مرحباً، شيخنا الفاضل
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50">
+              تابع تسميع طلاب حلقتك، وسجّل الحضور والإنجازات اليومية، ويمكنك العمل بدون إنترنت ثم مزامنة البيانات عند عودة الاتصال.
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-emerald-900/80 border border-emerald-500/30 p-3 text-xs font-bold text-emerald-100 min-w-48 text-center sm:text-right shrink-0">
+            <p className="text-[10px] text-emerald-300">حالة الاتصال والمزامنة:</p>
+            {isMounted ? (
+              isClientOffline ? (
+                <span className="text-amber-300 font-black flex items-center gap-1.5 justify-center sm:justify-start mt-1">
+                  <span>📡</span> غير متصل — يتم الحفظ محلياً
+                </span>
+              ) : offlineSyncItems.length > 0 ? (
+                <span className="text-amber-200 font-black flex items-center gap-1.5 justify-center sm:justify-start mt-1">
+                  <span>⏳</span> يوجد {offlineSyncItems.length} عمليات بانتظار المزامنة
+                </span>
+              ) : (
+                <span className="text-emerald-200 font-black flex items-center gap-1.5 justify-center sm:justify-start mt-1">
+                  <span>🟢</span> متصل بالإنترنت ومزامن
+                </span>
+              )
+            ) : (
+              <span className="text-emerald-300 font-bold mt-1 block">جاري التحقق...</span>
+            )}
+          </div>
+        </div>
+      </section>
+
       {/* Network Status & Offline Queue Monitoring */}
       <NetworkStatusBar onSyncCompleted={() => void getAllSyncItems().then(setOfflineSyncItems)} />
 
@@ -416,8 +462,8 @@ export function TeacherSessionPanel({
         </aside>
       ) : null}
 
-      {/* 5 Dashboard Tabs Navigation Bar */}
-      <nav className="flex overflow-x-auto rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-1.5 shadow-sm scrollbar-none transition-colors duration-200">
+      {/* 6 Dashboard Tabs Navigation Bar with Horizontal Scroll */}
+      <nav className="flex overflow-x-auto whitespace-nowrap rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-1.5 shadow-sm scrollbar-thin transition-colors duration-200 gap-1">
         <button
           type="button"
           onClick={() => setActiveTab("recitation")}
@@ -452,6 +498,18 @@ export function TeacherSessionPanel({
           }`}
         >
           <span>📜 الجلسات المسجلة ({dashboard.recentSessions.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("exams")}
+          className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-5 text-xs font-black transition ${
+            activeTab === "exams"
+              ? "bg-[var(--primary)] text-white shadow-md"
+              : "text-[var(--text-muted)] hover:bg-[var(--card-soft)] hover:text-[var(--primary)]"
+          }`}
+        >
+          <span>📝 الاختبارات</span>
         </button>
 
         <button
@@ -609,52 +667,100 @@ export function TeacherSessionPanel({
                       {/* Accordion Body */}
                       {isExpanded ? (
                         <div className="mt-4 border-t border-[var(--border-color)] pt-4 space-y-4">
-                          {/* Attendance Options */}
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            <button
-                              type="button"
-                              onClick={() => setAttendance(student.studentId, "PRESENT")}
-                              className={`rounded-2xl p-2.5 text-xs font-black transition ${
-                                student.attendance === "PRESENT"
-                                  ? "bg-emerald-600 dark:bg-emerald-600 text-white shadow-md"
-                                  : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-emerald-500/10"
-                              }`}
-                            >
-                              حاضر
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setAttendance(student.studentId, "NOT_HEARD")}
-                              className={`rounded-2xl p-2.5 text-xs font-black transition ${
-                                student.attendance === "NOT_HEARD"
-                                  ? "bg-amber-600 dark:bg-amber-600 text-white shadow-md"
-                                  : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-amber-500/10"
-                              }`}
-                            >
-                              لم يسمّع
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setAttendance(student.studentId, "ABSENT")}
-                              className={`rounded-2xl p-2.5 text-xs font-black transition ${
-                                student.attendance === "ABSENT"
-                                  ? "bg-red-600 dark:bg-red-600 text-white shadow-md"
-                                  : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-red-500/10"
-                              }`}
-                            >
-                              غائب
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setAttendance(student.studentId, "EXCUSED")}
-                              className={`rounded-2xl p-2.5 text-xs font-black transition ${
-                                student.attendance === "EXCUSED"
-                                  ? "bg-blue-600 dark:bg-blue-600 text-white shadow-md"
-                                  : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-blue-500/10"
-                              }`}
-                            >
-                              عذر
-                            </button>
+                          {/* 2-Level Attendance Options */}
+                          <div className="space-y-3">
+                            {/* Level 1: Present vs Absent */}
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (student.attendance !== "PRESENT" && student.attendance !== "NOT_HEARD") {
+                                    setAttendance(student.studentId, "PRESENT");
+                                  }
+                                }}
+                                className={`flex-1 rounded-2xl py-3 text-xs font-black transition ${
+                                  student.attendance === "PRESENT" || student.attendance === "NOT_HEARD"
+                                    ? "bg-emerald-600 text-white shadow-md"
+                                    : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-emerald-500/10"
+                                }`}
+                              >
+                                ✅ حاضر
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (student.attendance !== "ABSENT" && student.attendance !== "EXCUSED") {
+                                    setAttendance(student.studentId, "ABSENT");
+                                  }
+                                }}
+                                className={`flex-1 rounded-2xl py-3 text-xs font-black transition ${
+                                  student.attendance === "ABSENT" || student.attendance === "EXCUSED"
+                                    ? "bg-red-600 text-white shadow-md"
+                                    : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-red-500/10"
+                                }`}
+                              >
+                                ❌ غائب
+                              </button>
+                            </div>
+
+                            {/* Level 2 for Present: Recited vs Not Recited */}
+                            {student.attendance === "PRESENT" || student.attendance === "NOT_HEARD" ? (
+                              <div className="flex gap-2 bg-[var(--card-soft)] p-2 rounded-2xl border border-[var(--border-color)]">
+                                <button
+                                  type="button"
+                                  onClick={() => setAttendance(student.studentId, "PRESENT")}
+                                  className={`flex-1 rounded-xl py-2 text-xs font-black transition ${
+                                    student.attendance === "PRESENT"
+                                      ? "bg-[var(--primary)] text-white shadow-sm"
+                                      : "bg-transparent text-[var(--text-main)] hover:bg-[var(--card-bg)]"
+                                  }`}
+                                >
+                                  📖 سمّع (إدخال الحفظ والمراجعة)
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setAttendance(student.studentId, "NOT_HEARD")}
+                                  className={`flex-1 rounded-xl py-2 text-xs font-black transition ${
+                                    student.attendance === "NOT_HEARD"
+                                      ? "bg-amber-600 text-white shadow-sm"
+                                      : "bg-transparent text-[var(--text-main)] hover:bg-[var(--card-bg)]"
+                                  }`}
+                                >
+                                  ⚠️ لم يسمّع
+                                </button>
+                              </div>
+                            ) : null}
+
+                            {/* Level 2 for Absent: Excused vs Unexcused */}
+                            {student.attendance === "ABSENT" || student.attendance === "EXCUSED" ? (
+                              <div className="flex gap-2 bg-[var(--card-soft)] p-2 rounded-2xl border border-[var(--border-color)]">
+                                <button
+                                  type="button"
+                                  onClick={() => setAttendance(student.studentId, "EXCUSED")}
+                                  className={`flex-1 rounded-xl py-2 text-xs font-black transition ${
+                                    student.attendance === "EXCUSED"
+                                      ? "bg-blue-600 text-white shadow-sm"
+                                      : "bg-transparent text-[var(--text-main)] hover:bg-[var(--card-bg)]"
+                                  }`}
+                                >
+                                  🔵 بعذر
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setAttendance(student.studentId, "ABSENT")}
+                                  className={`flex-1 rounded-xl py-2 text-xs font-black transition ${
+                                    student.attendance === "ABSENT"
+                                      ? "bg-red-700 text-white shadow-sm"
+                                      : "bg-transparent text-[var(--text-main)] hover:bg-[var(--card-bg)]"
+                                  }`}
+                                >
+                                  ❌ بدون عذر
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
 
                           {/* Recitation Quran Surahs Input Area if PRESENT */}
@@ -799,7 +905,12 @@ export function TeacherSessionPanel({
         </section>
       ) : null}
 
-      {/* Tab 4: Parent Report Selector Tab */}
+      {/* Tab 4: Teacher Exams Tab */}
+      {activeTab === "exams" ? (
+        <TeacherExamsPanel exams={officialExams} />
+      ) : null}
+
+      {/* Tab 5: Parent Report Selector Tab */}
       {activeTab === "parent_report" ? (
         isOfflineMode || isClientOffline ? (
           <aside className="rounded-3xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-6 text-center text-xs font-bold text-[var(--status-warning-text)] space-y-2">
