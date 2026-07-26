@@ -9,10 +9,10 @@ export function BrandMark({ compact = false }: BrandMarkProps) {
   if (compact) {
     return (
       <div className="flex items-center">
-        <div className="relative size-40 shrink-0">
+        <div className="relative size-24 sm:size-28 shrink-0">
           <DynamicLogo
             alt={`شعار ${appConfig.centerName}`}
-            sizes="160px"
+            sizes="112px"
           />
         </div>
       </div>
