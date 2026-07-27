@@ -13,7 +13,7 @@ export function DashboardShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-[var(--bg-app)] text-[var(--text-main)] transition-colors duration-200">
+    <div className="flex min-h-dvh max-w-full flex-col overflow-x-hidden bg-[var(--bg-app)] text-[var(--text-main)] transition-colors duration-200">
       <header className="sticky top-0 z-20 border-b border-[var(--border-color)] bg-[var(--card-bg)]/95 px-4 shadow-xs backdrop-blur-md transition-colors duration-200">
         <div className="mx-auto flex h-20 w-full max-w-6xl items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">

@@ -10,8 +10,8 @@ export default async function LoginPage() {
   await redirectAuthenticatedUser();
 
   return (
-    <div className="flex min-h-dvh flex-col justify-between bg-[var(--bg-app)] text-[var(--text-main)] transition-colors duration-200" dir="rtl">
-      <main className="relative flex-1 px-4 py-8 sm:px-6 sm:py-12">
+    <div className="flex min-h-dvh max-w-full flex-col justify-between overflow-x-hidden bg-[var(--bg-app)] text-[var(--text-main)] transition-colors duration-200" dir="rtl">
+      <main className="relative flex-1 max-w-full overflow-x-hidden px-4 py-8 sm:px-6 sm:py-12">
         {/* Decorative Ornaments */}
         <div aria-hidden="true" className="pointer-events-none absolute -right-32 -top-32 size-96 rounded-full bg-[var(--primary)]/10 blur-3xl" />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -left-32 size-96 rounded-full bg-[var(--gold)]/10 blur-3xl" />
