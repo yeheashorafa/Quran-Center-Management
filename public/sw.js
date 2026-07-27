@@ -92,6 +92,10 @@ const OFFLINE_RESTRICTED_HTML = `
       <a href="/teacher" class="btn">📖 وضع الشيخ (التسميع اليومي)</a>
       <a href="/examiner" class="btn btn-sky">📝 وضع المختبر (الاختبارات الرسمية)</a>
     </div>
+    <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #334155; font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.6;">
+      🤍 صدقة جارية عن روح الشهداء بإذن الله<br>
+      <span style="color: #34d399; font-weight: 700;">أبو فايز الشرفا · أبو أنس الشرفا · أبو المعتصم الزرد</span>
+    </div>
   </div>
 </body>
 </html>
