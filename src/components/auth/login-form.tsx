@@ -239,7 +239,9 @@ export function LoginForm() {
             {teacherProfile ? (
               <button
                 type="button"
-                onClick={() => router.push("/teacher")}
+                onClick={() => {
+                  window.location.href = "/teacher";
+                }}
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] px-5 py-3 text-sm font-black text-white shadow-md transition hover:bg-[var(--primary-dark)] active:scale-[0.99]"
               >
                 📖 الدخول أوفلاين كشيخ ({teacherProfile.teacherName})
@@ -249,7 +251,9 @@ export function LoginForm() {
             {examinerProfile ? (
               <button
                 type="button"
-                onClick={() => router.push("/examiner")}
+                onClick={() => {
+                  window.location.href = "/examiner";
+                }}
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--primary-dark)] px-5 py-3 text-sm font-black text-white shadow-md transition hover:opacity-90 active:scale-[0.99]"
               >
                 📝 الدخول أوفلاين كمختبر ({examinerProfile.examinerName})

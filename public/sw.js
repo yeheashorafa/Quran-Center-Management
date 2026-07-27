@@ -1,4 +1,4 @@
-const CACHE_NAME = "qcm-pwa-v9";
+const CACHE_NAME = "mutaqin-offline-shell-v11";
 const STATIC_ASSETS = [
   "/",
   "/login",
@@ -112,7 +112,7 @@ function canCacheRequest(request, response) {
   } catch {
     return false;
   }
-  if (!response || !response.ok) return false;
+  if (!response || (!response.ok && response.status !== 304)) return false;
   if (response.type !== "basic" && response.type !== "cors") return false;
   return true;
 }
@@ -132,6 +132,14 @@ async function safeCachePut(request, responseClone) {
   }
 }
 
+function isAppPageRequest(request, url) {
+  if (request.mode === "navigate") return true;
+  if (request.headers.get("RSC") === "1") return true;
+  if (url.searchParams.has("_rsc")) return true;
+  if (request.headers.get("Accept")?.includes("text/html")) return true;
+  return false;
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
@@ -140,7 +148,7 @@ self.addEventListener("install", (event) => {
         STATIC_ASSETS.map(async (asset) => {
           try {
             const response = await fetch(asset, { redirect: "follow" });
-            if (response && response.ok) {
+            if (response && (response.ok || response.status === 304)) {
               await cache.put(asset, response);
             }
           } catch (err) {
@@ -182,10 +190,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Skip non-GET requests and API endpoints from PWA page cache
   if (request.method !== "GET" || url.pathname.startsWith("/api/")) {
     return;
   }
 
+  // Strictly Network-Only for /manager routes
   if (url.pathname.startsWith("/manager")) {
     event.respondWith(
       (async () => {
@@ -201,20 +211,24 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Strategy for Next.js Static Chunks (/_next/static/*)
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(
       (async () => {
         try {
-          const networkResponse = await fetch(request);
-          if (networkResponse && networkResponse.ok) {
-            safeCachePut(request, networkResponse.clone());
-          }
-          return networkResponse;
-        } catch {
           const cachedResponse = await caches.match(request, { ignoreSearch: true });
           if (cachedResponse) {
             return cachedResponse;
           }
+          const networkResponse = await fetch(request);
+          if (networkResponse && (networkResponse.ok || networkResponse.status === 304)) {
+            safeCachePut(request, networkResponse.clone());
+          }
+          return networkResponse;
+        } catch {
+          const fallbackCached = await caches.match(request, { ignoreSearch: true });
+          if (fallbackCached) return fallbackCached;
+
           return new Response("Network Error", {
             status: 408,
             headers: { "Content-Type": "text/plain; charset=utf-8" },
@@ -225,12 +239,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (request.mode === "navigate") {
+  // Strategy for App Shell & Page Navigations (/login, /teacher, /examiner, /)
+  if (isAppPageRequest(request, url)) {
     event.respondWith(
       (async () => {
         try {
           const networkResponse = await fetch(request);
-          if (networkResponse && networkResponse.ok) {
+          if (networkResponse && (networkResponse.ok || networkResponse.status === 304)) {
             safeCachePut(request, networkResponse.clone());
           }
           return networkResponse;
@@ -263,6 +278,7 @@ self.addEventListener("fetch", (event) => {
             if (fallback) return fallback;
           }
 
+          // General offline fallback for App Pages
           const generalFallback =
             (await cache.match("/login")) ||
             (await cache.match("/teacher")) ||
@@ -279,6 +295,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // General Strategy for Static Assets (Images, Icons, Fonts)
   event.respondWith(
     (async () => {
       try {
@@ -286,7 +303,7 @@ self.addEventListener("fetch", (event) => {
         if (cachedResponse) {
           fetch(request)
             .then((networkResponse) => {
-              if (networkResponse && networkResponse.ok) {
+              if (networkResponse && (networkResponse.ok || networkResponse.status === 304)) {
                 safeCachePut(request, networkResponse.clone());
               }
             })
@@ -295,7 +312,7 @@ self.addEventListener("fetch", (event) => {
         }
 
         const networkResponse = await fetch(request);
-        if (networkResponse && networkResponse.ok) {
+        if (networkResponse && (networkResponse.ok || networkResponse.status === 304)) {
           safeCachePut(request, networkResponse.clone());
         }
         return networkResponse;
