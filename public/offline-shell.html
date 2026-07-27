@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>دخول أوفلاين | مركز سيد الشهداء حمزة</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --emerald: #047857;
+      --emerald-hover: #065f46;
+      --sky: #0369a1;
+      --sky-hover: #075985;
+      --warning-bg: rgba(217, 119, 6, 0.15);
+      --warning-border: rgba(245, 158, 11, 0.3);
+      --warning-text: #fbbf24;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 1.25rem;
+      direction: rtl;
+    }
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 1.5rem;
+      padding: 2rem;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+      text-align: center;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background-color: var(--warning-bg);
+      border: 1px solid var(--warning-border);
+      color: var(--warning-text);
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.8125rem;
+      font-weight: 800;
+      margin-bottom: 1.25rem;
+    }
+    .brand {
+      font-size: 1.25rem;
+      font-weight: 900;
+      color: var(--text);
+      margin-bottom: 0.375rem;
+    }
+    .subtext {
+      font-size: 0.8125rem;
+      color: var(--muted);
+      margin-bottom: 1.5rem;
+      line-height: 1.5;
+    }
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+      margin: 1.25rem 0;
+    }
+    .accounts-title {
+      font-size: 0.875rem;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 1rem;
+      text-align: right;
+    }
+    .btn-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 0.875rem 1.25rem;
+      border-radius: 0.875rem;
+      font-size: 0.875rem;
+      font-weight: 800;
+      color: #ffffff;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    .btn:active {
+      transform: scale(0.99);
+    }
+    .btn-teacher {
+      background-color: var(--emerald);
+    }
+    .btn-teacher:hover {
+      background-color: var(--emerald-hover);
+    }
+    .btn-examiner {
+      background-color: var(--sky);
+    }
+    .btn-examiner:hover {
+      background-color: var(--sky-hover);
+    }
+    .no-accounts {
+      background-color: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #fca5a5;
+      padding: 1rem;
+      border-radius: 0.875rem;
+      font-size: 0.8125rem;
+      font-weight: 700;
+      line-height: 1.6;
+      text-align: right;
+    }
+    .loading-state {
+      font-size: 0.875rem;
+      color: var(--muted);
+      padding: 1rem 0;
+    }
+    .footer {
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.6875rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .footer-names {
+      color: #34d399;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="badge">
+      <span>📡</span>
+      <span>وضع العمل أوفلاين (بدون إنترنت)</span>
+    </div>
+
+    <h1 class="brand">مركز سيد الشهداء حمزة</h1>
+    <p class="subtext">نظام إدارة الحلقات والتسميع والتقارير الرسمية</p>
+
+    <div class="divider"></div>
+
+    <div id="loading" class="loading-state">
+      جاري قراءة الحسابات المحفوظة محلياً...
+    </div>
+
+    <div id="accounts-container" style="display: none;">
+      <h2 class="accounts-title">🟢 الحسابات المحفوظة على هذا الجهاز:</h2>
+      <div class="btn-group" id="buttons-group">
+        <!-- Dynamic buttons rendered here -->
+      </div>
+    </div>
+
+    <div id="no-accounts-container" style="display: none;">
+      <div class="no-accounts">
+        ⚠️ لا توجد بيانات محفوظة لهذا الجهاز. افتح التطبيق مرة واحدة بالإنترنت وسجل الدخول أولاً لتفعيل التخزين المحلي.
+      </div>
+    </div>
+
+    <div class="footer">
+      🤍 صدقة جارية عن روح الشهداء بإذن الله<br>
+      <span class="footer-names">أبو فايز الشرفا · أبو أنس الشرفا · أبو المعتصم الزرد</span>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const DB_NAME = "qcm_offline_db";
+      const DB_VERSION = 3;
+      const STORE_PROFILE = "offline_user_profile";
+
+      const loadingEl = document.getElementById("loading");
+      const accountsEl = document.getElementById("accounts-container");
+      const buttonsEl = document.getElementById("buttons-group");
+      const noAccountsEl = document.getElementById("no-accounts-container");
+
+      if (!("indexedDB" in window)) {
+        loadingEl.style.display = "none";
+        noAccountsEl.style.display = "block";
+        return;
+      }
+
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+
+      req.onerror = function () {
+        loadingEl.style.display = "none";
+        noAccountsEl.style.display = "block";
+      };
+
+      req.onsuccess = function (event) {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains(STORE_PROFILE)) {
+          loadingEl.style.display = "none";
+          noAccountsEl.style.display = "block";
+          return;
+        }
+
+        const tx = db.transaction(STORE_PROFILE, "readonly");
+        const store = tx.objectStore(STORE_PROFILE);
+
+        let teacherProfile = null;
+        let examinerProfile = null;
+
+        const reqTeacher = store.get("TEACHER");
+        reqTeacher.onsuccess = function () {
+          teacherProfile = reqTeacher.result || null;
+        };
+
+        const reqExaminer = store.get("EXAMINER");
+        reqExaminer.onsuccess = function () {
+          examinerProfile = reqExaminer.result || null;
+        };
+
+        tx.oncomplete = function () {
+          loadingEl.style.display = "none";
+
+          let hasAccount = false;
+          buttonsEl.innerHTML = "";
+
+          if (teacherProfile && teacherProfile.role === "TEACHER") {
+            hasAccount = true;
+            const btn = document.createElement("button");
+            btn.className = "btn btn-teacher";
+            btn.type = "button";
+            btn.innerHTML = "📖 الدخول أوفلاين كشيخ (" + (teacherProfile.teacherName || "الشيخ") + ")";
+            btn.onclick = function () {
+              try {
+                localStorage.setItem("offline_role", "TEACHER");
+              } catch (e) {}
+              window.location.href = "/offline-teacher";
+            };
+            buttonsEl.appendChild(btn);
+          }
+
+          if (examinerProfile && examinerProfile.role === "EXAMINER") {
+            hasAccount = true;
+            const btn = document.createElement("button");
+            btn.className = "btn btn-examiner";
+            btn.type = "button";
+            btn.innerHTML = "📝 الدخول أوفلاين كمختبر (" + (examinerProfile.examinerName || "المختبر") + ")";
+            btn.onclick = function () {
+              try {
+                localStorage.setItem("offline_role", "EXAMINER");
+              } catch (e) {}
+              window.location.href = "/offline-examiner";
+            };
+            buttonsEl.appendChild(btn);
+          }
+
+          if (hasAccount) {
+            accountsEl.style.display = "block";
+          } else {
+            noAccountsEl.style.display = "block";
+          }
+        };
+      };
+    })();
+  </script>
+</body>
+</html>

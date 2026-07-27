@@ -163,6 +163,41 @@ export function TeacherSessionPanel({
 
     void getAllSyncItems().then(setOfflineSyncItems);
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      queueMicrotask(() => {
+        setIsOfflineMode(true);
+      });
+      void getTeacherDataCache("teacher", halaqaId).then((cache) => {
+        if (cache && cache.students.length > 0) {
+          setStudents(cache.students);
+          setEditor(
+            cache.editor || {
+              allowed: true,
+              reason: null,
+              date: sessionDate,
+              weekday: "SATURDAY",
+              weekdayLabel: "السبت",
+              halaqa: { id: halaqaId, nameAr: "الحلقة", stageName: "المرحلة", weekdays: [] },
+              session: null,
+              students: cache.students,
+            },
+          );
+          if (cache.cachedAt) {
+            const cacheDateStr =
+              new Date(cache.cachedAt).toLocaleTimeString("ar-EG", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }) +
+              " - " +
+              new Date(cache.cachedAt).toLocaleDateString("ar-EG");
+            setLastCacheTime(cacheDateStr);
+          }
+        }
+        setLoading(false);
+      });
+      return () => controller.abort();
+    }
+
     fetch(`/api/teacher/sessions/${halaqaId}/${sessionDate}`, {
       signal: controller.signal,
       cache: "no-store",

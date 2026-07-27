@@ -1,5 +1,9 @@
-const CACHE_NAME = "mutaqin-offline-shell-v11";
+const CACHE_NAME = "mutaqin-offline-shell-v12";
 const STATIC_ASSETS = [
+  "/offline-shell.html",
+  "/offline-teacher",
+  "/offline-examiner",
+  "/offline-login",
   "/",
   "/login",
   "/teacher",
@@ -89,9 +93,9 @@ const OFFLINE_RESTRICTED_HTML = `
     <h1>صفحة المدير تتطلب اتصالاً بالإنترنت</h1>
     <p>لوحة تحكم المدير واستخراج التقارير تتطلب اتصالاً مباشراً بالشبكة لضمان أمان البيانات. تتاح خدمة العمل أوفلاين لشاشة التسميع اليومية للشيخ وشاشة تسجيل الاختبارات للمختبر.</p>
     <div class="actions">
-      <a href="/login" class="btn">🔑 صفحة الدخول (Login)</a>
-      <a href="/teacher" class="btn">📖 وضع الشيخ (التسميع اليومي)</a>
-      <a href="/examiner" class="btn btn-sky">📝 وضع المختبر (الاختبارات الرسمية)</a>
+      <a href="/offline-shell.html" class="btn">🔑 صفحة الدخول (Offline Shell)</a>
+      <a href="/offline-teacher" class="btn">📖 وضع الشيخ (التسميع اليومي)</a>
+      <a href="/offline-examiner" class="btn btn-sky">📝 وضع المختبر (الاختبارات الرسمية)</a>
     </div>
     <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #334155; font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.6;">
       🤍 صدقة جارية عن روح الشهداء بإذن الله<br>
@@ -124,7 +128,7 @@ async function safeCachePut(request, responseClone) {
     await cache.put(request, responseClone.clone());
 
     const url = new URL(request.url);
-    if (["/login", "/teacher", "/examiner", "/"].includes(url.pathname)) {
+    if (["/login", "/teacher", "/examiner", "/", "/offline-teacher", "/offline-examiner", "/offline-login"].includes(url.pathname)) {
       await cache.put(url.pathname, responseClone.clone());
     }
   } catch (error) {
@@ -239,7 +243,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Strategy for App Shell & Page Navigations (/login, /teacher, /examiner, /)
+  // Strategy for App Shell & Page Navigations (/login, /teacher, /examiner, /, /offline-teacher, /offline-examiner, /offline-login)
   if (isAppPageRequest(request, url)) {
     event.respondWith(
       (async () => {
@@ -252,39 +256,49 @@ self.addEventListener("fetch", (event) => {
         } catch {
           const cache = await caches.open(CACHE_NAME);
 
-          if (url.pathname.startsWith("/login")) {
+          // If navigating to dedicated offline teacher route
+          if (url.pathname.startsWith("/offline-teacher")) {
             const fallback =
-              (await cache.match("/login")) ||
-              (await cache.match(request, { ignoreSearch: true })) ||
-              (await cache.match("/"));
+              (await cache.match("/offline-teacher")) ||
+              (await cache.match("/offline-shell.html")) ||
+              (await cache.match("/login"));
             if (fallback) return fallback;
           }
 
+          // If navigating to dedicated offline examiner route
+          if (url.pathname.startsWith("/offline-examiner")) {
+            const fallback =
+              (await cache.match("/offline-examiner")) ||
+              (await cache.match("/offline-shell.html")) ||
+              (await cache.match("/login"));
+            if (fallback) return fallback;
+          }
+
+          // If navigating to teacher route offline
           if (url.pathname.startsWith("/teacher")) {
             const fallback =
               (await cache.match("/teacher")) ||
-              (await cache.match(request, { ignoreSearch: true })) ||
-              (await cache.match("/login")) ||
-              (await cache.match("/"));
+              (await cache.match("/offline-teacher")) ||
+              (await cache.match("/offline-shell.html"));
             if (fallback) return fallback;
           }
 
+          // If navigating to examiner route offline
           if (url.pathname.startsWith("/examiner")) {
             const fallback =
               (await cache.match("/examiner")) ||
-              (await cache.match(request, { ignoreSearch: true })) ||
-              (await cache.match("/login")) ||
-              (await cache.match("/"));
+              (await cache.match("/offline-examiner")) ||
+              (await cache.match("/offline-shell.html"));
             if (fallback) return fallback;
           }
 
-          // General offline fallback for App Pages
-          const generalFallback =
+          // Primary Offline Fallback for App Shell (/login, /, /offline-login, etc.)
+          const offlineShellFallback =
+            (await cache.match("/offline-shell.html")) ||
+            (await cache.match("/offline-login")) ||
             (await cache.match("/login")) ||
-            (await cache.match("/teacher")) ||
-            (await cache.match("/examiner")) ||
             (await cache.match("/"));
-          if (generalFallback) return generalFallback;
+          if (offlineShellFallback) return offlineShellFallback;
 
           return new Response(OFFLINE_RESTRICTED_HTML, {
             headers: { "Content-Type": "text/html; charset=utf-8" },

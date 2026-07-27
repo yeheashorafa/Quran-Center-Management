@@ -5,7 +5,8 @@ import { useEffect } from "react";
 export function RegisterSW() {
   useEffect(() => {
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      const isPWAEnabled = process.env.NEXT_PUBLIC_ENABLE_PWA === "true";
+      // PWA is enabled by default unless explicitly disabled with NEXT_PUBLIC_ENABLE_PWA="false"
+      const isPWAEnabled = process.env.NEXT_PUBLIC_ENABLE_PWA !== "false";
 
       if (isPWAEnabled) {
         window.addEventListener("load", () => {
@@ -33,7 +34,7 @@ export function RegisterSW() {
         window.addEventListener("visibilitychange", handleVisibility);
         return () => window.removeEventListener("visibilitychange", handleVisibility);
       } else {
-        // Unregister service worker if PWA is disabled
+        // Unregister service worker if PWA is explicitly disabled
         navigator.serviceWorker.getRegistrations().then((registrations) => {
           for (const registration of registrations) {
             void registration.unregister();
@@ -47,4 +48,3 @@ export function RegisterSW() {
 
   return null;
 }
-

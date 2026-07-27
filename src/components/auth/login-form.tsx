@@ -240,7 +240,8 @@ export function LoginForm() {
               <button
                 type="button"
                 onClick={() => {
-                  window.location.href = "/teacher";
+                  try { localStorage.setItem("offline_role", "TEACHER"); } catch {}
+                  window.location.href = "/offline-teacher";
                 }}
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] px-5 py-3 text-sm font-black text-white shadow-md transition hover:bg-[var(--primary-dark)] active:scale-[0.99]"
               >
@@ -252,7 +253,8 @@ export function LoginForm() {
               <button
                 type="button"
                 onClick={() => {
-                  window.location.href = "/examiner";
+                  try { localStorage.setItem("offline_role", "EXAMINER"); } catch {}
+                  window.location.href = "/offline-examiner";
                 }}
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--primary-dark)] px-5 py-3 text-sm font-black text-white shadow-md transition hover:opacity-90 active:scale-[0.99]"
               >
@@ -282,7 +284,7 @@ export function LoginForm() {
               {teacherProfile ? (
                 <button
                   type="button"
-                  onClick={() => router.push("/teacher")}
+                  onClick={() => router.push("/offline-teacher")}
                   className="flex items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-xs font-black text-white shadow-xs hover:opacity-90 transition"
                 >
                   📖 الدخول إلى وضع الشيخ ({teacherProfile.teacherName} — التسميع Offline)
@@ -292,7 +294,7 @@ export function LoginForm() {
               {examinerProfile ? (
                 <button
                   type="button"
-                  onClick={() => router.push("/examiner")}
+                  onClick={() => router.push("/offline-examiner")}
                   className="flex items-center justify-center gap-2 rounded-xl bg-[var(--primary-dark)] px-4 py-2.5 text-xs font-black text-white shadow-xs hover:opacity-90 transition"
                 >
                   📝 الدخول إلى وضع المختبر ({examinerProfile.examinerName} — الاختبارات Offline)
