@@ -63,6 +63,26 @@ export function LoginForm() {
 
   const [teacherProfile, setTeacherProfile] = useState<OfflineTeacherProfile | null>(null);
   const [examinerProfile, setExaminerProfile] = useState<OfflineExaminerProfile | null>(null);
+  const [isClientOffline, setIsClientOffline] = useState(false);
+  const [isOfflineLogout] = useState(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("offlineLogout") === "1";
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    function updateOnlineStatus() {
+      setIsClientOffline(!navigator.onLine);
+    }
+    updateOnlineStatus();
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+    return () => {
+      window.removeEventListener("online", updateOnlineStatus);
+      window.removeEventListener("offline", updateOnlineStatus);
+    };
+  }, []);
 
   const {
     register,
@@ -193,6 +213,56 @@ export function LoginForm() {
 
     router.replace(payload.redirectTo);
     router.refresh();
+  }
+
+  if (isClientOffline) {
+    return (
+      <div className="space-y-4 text-right">
+        {isOfflineLogout ? (
+          <div className="rounded-2xl border border-[var(--status-info-border)] bg-[var(--status-info-bg)] p-4 text-xs font-bold text-[var(--status-info-text)] shadow-xs leading-relaxed">
+            ℹ️ تم تسجيل الخروج محلياً. يمكنك الدخول أوفلاين كشيخ أو مختبر إذا كانت بياناتك محفوظة مسبقاً على هذا الجهاز.
+          </div>
+        ) : null}
+
+        <div className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-4 text-xs font-bold text-[var(--status-warning-text)] shadow-xs space-y-1">
+          <div className="flex items-center gap-2 font-black text-sm text-[var(--status-warning-text)]">
+            <span>📡</span>
+            <span>أنت غير متصل بالإنترنت</span>
+          </div>
+          <p className="opacity-90 leading-relaxed">
+            يمكنك الدخول أوفلاين للحسابات التي تم فتحها مسبقاً على هذا الجهاز فقط.
+          </p>
+        </div>
+
+        {teacherProfile || examinerProfile ? (
+          <div className="space-y-3 pt-2">
+            {teacherProfile ? (
+              <button
+                type="button"
+                onClick={() => router.push("/teacher")}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] px-5 py-3 text-sm font-black text-white shadow-md transition hover:bg-[var(--primary-dark)] active:scale-[0.99]"
+              >
+                📖 الدخول أوفلاين كشيخ ({teacherProfile.teacherName})
+              </button>
+            ) : null}
+
+            {examinerProfile ? (
+              <button
+                type="button"
+                onClick={() => router.push("/examiner")}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--primary-dark)] px-5 py-3 text-sm font-black text-white shadow-md transition hover:opacity-90 active:scale-[0.99]"
+              >
+                📝 الدخول أوفلاين كمختبر ({examinerProfile.examinerName})
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-4 text-xs font-extrabold text-[var(--status-danger-text)] shadow-xs leading-relaxed">
+            ⚠️ لا توجد بيانات محفوظة لهذا الجهاز. سجل الدخول مرة واحدة بالإنترنت أولاً.
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (

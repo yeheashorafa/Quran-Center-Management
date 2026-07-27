@@ -2,9 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearOfflineProfiles } from "@/lib/offline/offline-profile";
-import { clearTeacherDataCache } from "@/lib/offline/teacher-cache";
-import { clearExaminerDataCache } from "@/lib/offline/examiner-cache";
 
 export function LogoutButton() {
   const router = useRouter();
@@ -12,19 +9,24 @@ export function LogoutButton() {
 
   async function logout() {
     setIsPending(true);
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "same-origin",
-      }).catch(() => {});
-      await clearOfflineProfiles();
-      await clearTeacherDataCache();
-      await clearExaminerDataCache();
-    } finally {
-      router.replace("/login");
-      router.refresh();
-      setIsPending(false);
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+
+    if (!isOffline) {
+      try {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "same-origin",
+        });
+      } catch {
+        // Ignore network errors on logout fetch
+      }
     }
+
+    // Perform local logout without wiping saved offline profiles/caches
+    const targetUrl = isOffline ? "/login?offlineLogout=1" : "/login";
+    router.replace(targetUrl);
+    router.refresh();
+    setIsPending(false);
   }
 
   return (

@@ -1,4 +1,4 @@
-const CACHE_NAME = "qcm-pwa-v8";
+const CACHE_NAME = "qcm-pwa-v9";
 const STATIC_ASSETS = [
   "/",
   "/login",
@@ -86,9 +86,10 @@ const OFFLINE_RESTRICTED_HTML = `
 <body>
   <div class="card">
     <div class="icon">📡 Network Offline</div>
-    <h1>هذه الصفحة تتطلب اتصالاً بالإنترنت</h1>
-    <p>لوحة تحكم المدير، استخراج تقارير PDF/Excel وإدارة الحلقات غير متاحة في وضع العمل بدون إنترنت. تتاح خدمة العمل بدون إنترنت حصرياً لشاشة التسميع اليومية للشيخ وشاشة تسجيل الاختبارات الرسمية للمختبر.</p>
+    <h1>صفحة المدير تتطلب اتصالاً بالإنترنت</h1>
+    <p>لوحة تحكم المدير واستخراج التقارير تتطلب اتصالاً مباشراً بالشبكة لضمان أمان البيانات. تتاح خدمة العمل أوفلاين لشاشة التسميع اليومية للشيخ وشاشة تسجيل الاختبارات للمختبر.</p>
     <div class="actions">
+      <a href="/login" class="btn">🔑 صفحة الدخول (Login)</a>
       <a href="/teacher" class="btn">📖 وضع الشيخ (التسميع اليومي)</a>
       <a href="/examiner" class="btn btn-sky">📝 وضع المختبر (الاختبارات الرسمية)</a>
     </div>
@@ -120,7 +121,12 @@ async function safeCachePut(request, responseClone) {
   try {
     if (!canCacheRequest(request, responseClone)) return;
     const cache = await caches.open(CACHE_NAME);
-    await cache.put(request, responseClone);
+    await cache.put(request, responseClone.clone());
+
+    const url = new URL(request.url);
+    if (["/login", "/teacher", "/examiner", "/"].includes(url.pathname)) {
+      await cache.put(url.pathname, responseClone.clone());
+    }
   } catch (error) {
     console.warn("SW cache put skipped:", request.url, error);
   }
@@ -128,11 +134,21 @@ async function safeCachePut(request, responseClone) {
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch((err) => {
-        console.warn("PWA Service Worker pre-cache warning:", err);
-      });
-    })
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      await Promise.all(
+        STATIC_ASSETS.map(async (asset) => {
+          try {
+            const response = await fetch(asset, { redirect: "follow" });
+            if (response && response.ok) {
+              await cache.put(asset, response);
+            }
+          } catch (err) {
+            console.warn("PWA SW pre-cache asset warning:", asset, err);
+          }
+        })
+      );
+    })()
   );
   self.skipWaiting();
 });
@@ -162,17 +178,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Early filter: skip unsupported protocols
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return;
   }
 
-  // Skip non-GET requests and API calls
   if (request.method !== "GET" || url.pathname.startsWith("/api/")) {
     return;
   }
 
-  // Strictly Network-Only for /manager route (no caching of authenticated manager UI)
   if (url.pathname.startsWith("/manager")) {
     event.respondWith(
       (async () => {
@@ -188,7 +201,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Strategy for Next.js Static JS/CSS Chunks: Network-First to avoid stale assets
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(
       (async () => {
@@ -199,7 +211,7 @@ self.addEventListener("fetch", (event) => {
           }
           return networkResponse;
         } catch {
-          const cachedResponse = await caches.match(request);
+          const cachedResponse = await caches.match(request, { ignoreSearch: true });
           if (cachedResponse) {
             return cachedResponse;
           }
@@ -213,13 +225,65 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Strategy for static shell pages & public assets
+  if (request.mode === "navigate") {
+    event.respondWith(
+      (async () => {
+        try {
+          const networkResponse = await fetch(request);
+          if (networkResponse && networkResponse.ok) {
+            safeCachePut(request, networkResponse.clone());
+          }
+          return networkResponse;
+        } catch {
+          const cache = await caches.open(CACHE_NAME);
+
+          if (url.pathname.startsWith("/login")) {
+            const fallback =
+              (await cache.match("/login")) ||
+              (await cache.match(request, { ignoreSearch: true })) ||
+              (await cache.match("/"));
+            if (fallback) return fallback;
+          }
+
+          if (url.pathname.startsWith("/teacher")) {
+            const fallback =
+              (await cache.match("/teacher")) ||
+              (await cache.match(request, { ignoreSearch: true })) ||
+              (await cache.match("/login")) ||
+              (await cache.match("/"));
+            if (fallback) return fallback;
+          }
+
+          if (url.pathname.startsWith("/examiner")) {
+            const fallback =
+              (await cache.match("/examiner")) ||
+              (await cache.match(request, { ignoreSearch: true })) ||
+              (await cache.match("/login")) ||
+              (await cache.match("/"));
+            if (fallback) return fallback;
+          }
+
+          const generalFallback =
+            (await cache.match("/login")) ||
+            (await cache.match("/teacher")) ||
+            (await cache.match("/examiner")) ||
+            (await cache.match("/"));
+          if (generalFallback) return generalFallback;
+
+          return new Response(OFFLINE_RESTRICTED_HTML, {
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+          });
+        }
+      })()
+    );
+    return;
+  }
+
   event.respondWith(
     (async () => {
       try {
-        const cachedResponse = await caches.match(request);
+        const cachedResponse = await caches.match(request, { ignoreSearch: true });
         if (cachedResponse) {
-          // Refresh cache in background when online (fire-and-forget safely)
           fetch(request)
             .then((networkResponse) => {
               if (networkResponse && networkResponse.ok) {
@@ -236,36 +300,6 @@ self.addEventListener("fetch", (event) => {
         }
         return networkResponse;
       } catch {
-        // Navigation Fallback when offline
-        if (request.mode === "navigate") {
-          if (url.pathname.startsWith("/teacher")) {
-            const fallback = (await caches.match("/teacher")) || (await caches.match("/"));
-            if (fallback) return fallback;
-          }
-          if (url.pathname.startsWith("/examiner")) {
-            const fallback = (await caches.match("/examiner")) || (await caches.match("/"));
-            if (fallback) return fallback;
-          }
-          if (url.pathname.startsWith("/login")) {
-            const fallback = (await caches.match("/login")) || (await caches.match("/"));
-            if (fallback) return fallback;
-          }
-          if (url.pathname.startsWith("/manager")) {
-            return new Response(OFFLINE_RESTRICTED_HTML, {
-              headers: { "Content-Type": "text/html; charset=utf-8" },
-            });
-          }
-          const generalFallback =
-            (await caches.match("/teacher")) ||
-            (await caches.match("/examiner")) ||
-            (await caches.match("/login"));
-          if (generalFallback) return generalFallback;
-
-          return new Response(OFFLINE_RESTRICTED_HTML, {
-            headers: { "Content-Type": "text/html; charset=utf-8" },
-          });
-        }
-
         return new Response("Service Unavailable", {
           status: 503,
           headers: { "Content-Type": "text/plain; charset=utf-8" },
