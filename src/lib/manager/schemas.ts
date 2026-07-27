@@ -23,6 +23,44 @@ export const updateManagedUserStatusSchema = z.object({
   status: z.enum(["ACTIVE", "DISABLED"]),
 });
 
+export const updateManagedUserSchema = z.object({
+  displayName: z
+    .string()
+    .trim()
+    .min(2, "أدخل اسم المستخدم الظاهر.")
+    .max(160, "الاسم الظاهر طويل جداً."),
+  username: z
+    .string()
+    .trim()
+    .min(3, "اسم المستخدم يجب أن يتكون من 3 أحرف على الأقل.")
+    .max(80, "اسم المستخدم طويل جداً."),
+  role: z.enum(["TEACHER", "CENTER_MANAGER", "EXAMINER"]),
+  status: z.enum(["ACTIVE", "DISABLED"]),
+});
+
+export const resetUserPasswordSchema = z
+  .object({
+    mode: z.enum(["manual", "generate"]),
+    newPassword: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.mode === "manual") {
+      if (!data.newPassword || data.newPassword.trim().length < 6) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["newPassword"],
+          message: "كلمة المرور الجديدة يجب أن تتكون من 6 خانات على الأقل.",
+        });
+      } else if (data.newPassword.length > 128) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["newPassword"],
+          message: "كلمة المرور طويلة جداً.",
+        });
+      }
+    }
+  });
+
 export const createHalaqaSchema = z.object({
   nameAr: z
     .string()

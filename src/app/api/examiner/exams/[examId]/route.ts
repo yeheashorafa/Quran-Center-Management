@@ -10,7 +10,10 @@ import {
   isSameOriginRequest,
 } from "@/lib/http/request-metadata";
 import { dateOnlyToUtc, isFutureDateInPalestine } from "@/lib/memorization-sessions/date";
-import { officialExamResultLabel } from "@/lib/official-exams/grading";
+import {
+  minimumPassingScore,
+  officialExamResultLabel,
+} from "@/lib/official-exams/grading";
 import { updateOfficialExamSchema } from "@/lib/official-exams/schemas";
 
 export const runtime = "nodejs";
@@ -79,9 +82,6 @@ export async function PATCH(
         });
 
         if (!existing) throw new ExamValidationError("الاختبار غير موجود.", 404);
-        if (existing.status !== "ACTIVE") {
-          throw new ExamValidationError("لا يمكن تعديل اختبار ملغى.", 409);
-        }
 
         const student = await transaction.student.findFirst({
           where: { id: parsed.data.studentId, deletedAt: null },
@@ -120,7 +120,6 @@ export async function PATCH(
           where: {
             id: { not: examId },
             studentId: student.id,
-            examDate,
             examType: parsed.data.examType,
             status: "ACTIVE",
             scopes: {
@@ -134,21 +133,37 @@ export async function PATCH(
           select: { id: true },
         });
         if (duplicate) {
-          throw new ExamValidationError("يوجد اختبار آخر بنفس التاريخ والنطاق.", 409);
+          throw new ExamValidationError("يوجد اختبار آخر بنفس النطاق ونوع الاختبار.", 409);
         }
 
-        const resultLabel = officialExamResultLabel(
-          parsed.data.score,
-          enrollment.halaqa.stage?.code,
-        );
+        const stageCode = enrollment.halaqa.stage?.code;
+        const minScore = minimumPassingScore(stageCode);
+        const isNotPassed = Boolean(parsed.data.isNotPassed);
+        const rawScore = parsed.data.score ?? null;
+
+        if (!isNotPassed) {
+          if (rawScore === null || rawScore === undefined || Number.isNaN(rawScore)) {
+            throw new ExamValidationError("أدخل الدرجة الرقمية أو اختر غير مجاز.", 400);
+          }
+          if (rawScore < minScore) {
+            throw new ExamValidationError("هذه العلامة أقل من الحد الأدنى للإجازة لهذه المرحلة.", 400);
+          }
+        }
+
+        const finalScore = isNotPassed ? null : rawScore;
+        const resultLabel = officialExamResultLabel(finalScore, stageCode, isNotPassed);
+
         const updated = await transaction.officialExam.updateMany({
-          where: { id: examId, status: "ACTIVE", version: parsed.data.version },
+          where: { id: examId, version: parsed.data.version },
           data: {
             studentId: student.id,
             enrollmentId: enrollment.id,
             examDate,
             examType: parsed.data.examType,
-            score: parsed.data.score,
+            status: "ACTIVE",
+            voidedAt: null,
+            voidReason: null,
+            score: finalScore,
             resultLabel,
             notes: parsed.data.notes || null,
             version: { increment: 1 },
@@ -223,3 +238,93 @@ export async function PATCH(
     return errorResponse("تعذر تحديث الاختبار حالياً.", 500);
   }
 }
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ examId: string }> },
+) {
+  if (!isSameOriginRequest(request)) return errorResponse("تم رفض الطلب لأسباب أمنية.", 403);
+
+  const authorization = await authorizeApiPermission("exams.manage");
+  if (authorization.response) return authorization.response;
+
+  const { examId } = await context.params;
+  if (!examIdSchema.safeParse(examId).success) return errorResponse("معرف الاختبار غير صالح.", 400);
+
+  const requestId = randomUUID();
+  const ipAddress = getRequestIp(request);
+  const userAgent = getRequestUserAgent(request);
+
+  try {
+    await prisma.$transaction(
+      async (transaction) => {
+        const existing = await transaction.officialExam.findUnique({
+          where: { id: examId },
+          select: {
+            id: true,
+            studentId: true,
+            examinerUserId: true,
+            createdByUserId: true,
+            examDate: true,
+            examType: true,
+            status: true,
+            score: true,
+            resultLabel: true,
+            notes: true,
+            student: { select: { displayName: true } },
+            scopes: {
+              orderBy: { orderNo: "asc" },
+              select: { type: true, juzFrom: true, juzTo: true },
+            },
+          },
+        });
+
+        if (!existing) throw new ExamValidationError("الاختبار غير موجود.", 404);
+
+        const currentUserId = authorization.session.user.id;
+        const isOwner = existing.examinerUserId === currentUserId || existing.createdByUserId === currentUserId;
+        if (!isOwner) {
+          throw new ExamValidationError("لا يمكنك حذف اختبار لم تقم بتسجيله.", 403);
+        }
+
+        await transaction.officialExamScope.deleteMany({ where: { examId } });
+        await transaction.officialExam.delete({ where: { id: examId } });
+
+        await transaction.auditLog.create({
+          data: {
+            actorUserId: currentUserId,
+            action: "OFFICIAL_EXAM_DELETED",
+            entityType: "official_exam",
+            entityId: examId,
+            requestId,
+            ipAddress,
+            userAgent,
+            oldValues: {
+              examId: existing.id,
+              studentId: existing.studentId,
+              studentName: existing.student.displayName,
+              examDate: existing.examDate.toISOString().slice(0, 10),
+              examType: existing.examType,
+              status: existing.status,
+              juzFrom: existing.scopes[0]?.juzFrom ?? null,
+              juzTo: existing.scopes[0]?.juzTo ?? null,
+              score: existing.score === null ? null : Number(existing.score),
+              resultLabel: existing.resultLabel,
+              notes: existing.notes,
+              examinerId: existing.examinerUserId,
+              deletedBy: currentUserId,
+            },
+          },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    return NextResponse.json({ message: "تم حذف الاختبار نهائياً." });
+  } catch (error) {
+    if (error instanceof ExamValidationError) return errorResponse(error.message, error.status);
+    console.error("Delete official exam failed:", error);
+    return errorResponse("تعذر حذف الاختبار حالياً.", 500);
+  }
+}
+

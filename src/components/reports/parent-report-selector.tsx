@@ -30,8 +30,10 @@ export function ParentReportSelector({
   stages = [],
   halaqat = [],
   title = "تنزيل تقرير ولي الأمر (PDF)",
-  description = "حدد المرحلة ثم الحلقة/الشيخ ثم اختر الطالب للتنزيل المباشر كملف PDF مخصص لولي الأمر.",
+  description = "اختر الطالب ثم حدد الشهر للتنزيل المباشر كملف PDF مخصص لولي الأمر.",
   defaultStudentId,
+  hideStageFilter = false,
+  hideTeacherFilter = false,
 }: {
   students: StudentOption[];
   stages?: StageOption[];
@@ -39,6 +41,8 @@ export function ParentReportSelector({
   title?: string;
   description?: string;
   defaultStudentId?: string;
+  hideStageFilter?: boolean;
+  hideTeacherFilter?: boolean;
 }) {
   const [selectedStageId, setSelectedStageId] = useState("");
   const [selectedHalaqaId, setSelectedHalaqaId] = useState("");
@@ -84,14 +88,14 @@ export function ParentReportSelector({
     const selectedStageObj = stages.find((s) => s.id === selectedStageId);
     const selectedStageName = selectedStageObj?.nameAr || selectedStageId;
     return students.filter((s) => {
-      if (selectedStageId) {
+      if (!hideStageFilter && selectedStageId) {
         const matchesStage = s.stageId === selectedStageId || s.stageName === selectedStageName;
         if (!matchesStage) return false;
       }
-      if (selectedHalaqaId && s.halaqaId && s.halaqaId !== selectedHalaqaId) return false;
+      if (!hideTeacherFilter && selectedHalaqaId && s.halaqaId && s.halaqaId !== selectedHalaqaId) return false;
       return true;
     });
-  }, [students, stages, selectedStageId, selectedHalaqaId]);
+  }, [students, stages, selectedStageId, selectedHalaqaId, hideStageFilter, hideTeacherFilter]);
 
   function handleStageChange(stageId: string) {
     setSelectedStageId(stageId);
@@ -129,6 +133,8 @@ export function ParentReportSelector({
     setSuccessNotice("جاري تنزيل تقرير ولي الأمر PDF...");
   }
 
+  const showHalaqaDropdown = !hideTeacherFilter && availableHalaqat.length > 1;
+
   return (
     <section
       className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-5 shadow-sm text-[var(--text-main)] transition-colors duration-200"
@@ -154,44 +160,48 @@ export function ParentReportSelector({
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <label className="form-label" htmlFor="parent-report-stage">
-            المرحلة
-          </label>
-          <select
-            id="parent-report-stage"
-            className="form-control font-bold"
-            value={selectedStageId}
-            onChange={(e) => handleStageChange(e.target.value)}
-          >
-            <option value="">كل المراحل</option>
-            {availableStages.map((stage) => (
-              <option key={stage.id} value={stage.id}>
-                {stage.nameAr}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {!hideStageFilter ? (
+          <div>
+            <label className="form-label" htmlFor="parent-report-stage">
+              المرحلة
+            </label>
+            <select
+              id="parent-report-stage"
+              className="form-control font-bold"
+              value={selectedStageId}
+              onChange={(e) => handleStageChange(e.target.value)}
+            >
+              <option value="">كل المراحل</option>
+              {availableStages.map((stage) => (
+                <option key={stage.id} value={stage.id}>
+                  {stage.nameAr}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
-        <div>
-          <label className="form-label" htmlFor="parent-report-halaqa">
-            الشيخ / الحلقة
-          </label>
-          <select
-            id="parent-report-halaqa"
-            className="form-control font-bold"
-            value={selectedHalaqaId}
-            onChange={(e) => handleHalaqaChange(e.target.value)}
-          >
-            <option value="">كل الحلقات</option>
-            {availableHalaqat.map((halaqa) => (
-              <option key={halaqa.id} value={halaqa.id}>
-                {halaqa.nameAr}{halaqa.teacherName ? ` — ${halaqa.teacherName}` : ""}
-              </option>
-            ))}
-          </select>
-        </div>
+        {showHalaqaDropdown ? (
+          <div>
+            <label className="form-label" htmlFor="parent-report-halaqa">
+              الشيخ / الحلقة
+            </label>
+            <select
+              id="parent-report-halaqa"
+              className="form-control font-bold"
+              value={selectedHalaqaId}
+              onChange={(e) => handleHalaqaChange(e.target.value)}
+            >
+              <option value="">كل الحلقات</option>
+              {availableHalaqat.map((halaqa) => (
+                <option key={halaqa.id} value={halaqa.id}>
+                  {halaqa.nameAr}{halaqa.teacherName ? ` — ${halaqa.teacherName}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
         <div>
           <label className="form-label" htmlFor="parent-report-student">

@@ -173,7 +173,7 @@ export function generateParentReportHtml(data: ParentReportData): string {
         ? `
       <div class="info-card" style="margin-bottom: 20px;">
         <strong>آخر اختبار رسمي:</strong> ${data.latestExam.examType} — 
-        النتيجة: <strong>${data.latestExam.score ?? "مكتمل"} (${data.latestExam.resultLabel})</strong>
+        النتيجة: <strong>${data.latestExam.score !== null ? `${data.latestExam.score} (${data.latestExam.resultLabel})` : (data.latestExam.resultLabel ?? "—")}</strong>
         تاريخ: ${data.latestExam.examDate}
       </div>
     `

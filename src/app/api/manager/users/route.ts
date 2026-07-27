@@ -19,6 +19,60 @@ function errorResponse(message: string, status: number) {
   return NextResponse.json({ message }, { status });
 }
 
+export async function GET() {
+  const authorization = await authorizeApiPermission("users.manage");
+  if (authorization.response) return authorization.response;
+
+  const users = await prisma.user.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ status: "asc" }, { displayName: "asc" }],
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      status: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true,
+      roles: {
+        select: { role: { select: { code: true, nameAr: true } } },
+      },
+      staffAssignments: {
+        where: { deletedAt: null, endsOn: null },
+        select: {
+          role: true,
+          halaqa: {
+            select: {
+              id: true,
+              nameAr: true,
+              stage: { select: { id: true, nameAr: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const data = users.map((user) => ({
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    status: user.status,
+    lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
+    roles: user.roles.map(({ role }) => role),
+    activeHalaqat: user.staffAssignments.map(({ halaqa }) => ({
+      id: halaqa.id,
+      nameAr: halaqa.nameAr,
+      stageName: halaqa.stage?.nameAr ?? null,
+    })),
+    isCurrentUser: user.id === authorization.session.user.id,
+  }));
+
+  return NextResponse.json({ users: data });
+}
+
 export async function POST(request: Request) {
   if (!isSameOriginRequest(request)) {
     return errorResponse("تم رفض الطلب لأسباب أمنية.", 403);

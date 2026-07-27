@@ -11,12 +11,19 @@ const examFields = {
   examType,
   juzFrom: z.coerce.number().int().min(1, "الجزء من 1 إلى 30.").max(30, "الجزء من 1 إلى 30."),
   juzTo: z.coerce.number().int().min(1, "الجزء من 1 إلى 30.").max(30, "الجزء من 1 إلى 30."),
-  score: z.coerce.number().min(0, "الدرجة لا تقل عن صفر.").max(100, "الدرجة لا تزيد عن 100."),
+  isNotPassed: z.boolean().optional().default(false),
+  score: z.coerce.number().min(0, "الدرجة لا تقل عن صفر.").max(100, "الدرجة لا تزيد عن 100.").nullable().optional(),
   notes: z.string().trim().max(1000, "الملاحظة طويلة جداً.").optional().default(""),
 };
 
 function validateScope(
-  value: { examType: "INDIVIDUAL" | "COLLECTIVE"; juzFrom: number; juzTo: number },
+  value: {
+    examType: "INDIVIDUAL" | "COLLECTIVE";
+    juzFrom: number;
+    juzTo: number;
+    isNotPassed?: boolean;
+    score?: number | null;
+  },
   context: { addIssue(issue: { code: "custom"; path: (string | number)[]; message: string }): void },
 ) {
   if (value.examType === "INDIVIDUAL" && value.juzFrom !== value.juzTo) {
@@ -32,6 +39,14 @@ function validateScope(
       code: "custom",
       path: ["juzTo"],
       message: "جزء النهاية يجب أن يكون بعد جزء البداية أو مساوياً له.",
+    });
+  }
+
+  if (!value.isNotPassed && (value.score === null || value.score === undefined || Number.isNaN(value.score))) {
+    context.addIssue({
+      code: "custom",
+      path: ["score"],
+      message: "أدخل الدرجة الرقمية أو اختر غير مجاز.",
     });
   }
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = "qcm-pwa-v7";
+const CACHE_NAME = "qcm-pwa-v8";
 const STATIC_ASSETS = [
   "/",
   "/login",
@@ -103,6 +103,7 @@ function canCacheRequest(request, response) {
     const url = new URL(request.url);
     if (url.protocol !== "http:" && url.protocol !== "https:") return false;
     if (url.origin !== self.location.origin) return false;
+    if (url.pathname.startsWith("/manager") || url.pathname.startsWith("/api/manager")) return false;
   } catch {
     return false;
   }
@@ -164,6 +165,22 @@ self.addEventListener("fetch", (event) => {
 
   // Skip non-GET requests and API calls
   if (request.method !== "GET" || url.pathname.startsWith("/api/")) {
+    return;
+  }
+
+  // Strictly Network-Only for /manager route (no caching of authenticated manager UI)
+  if (url.pathname.startsWith("/manager")) {
+    event.respondWith(
+      (async () => {
+        try {
+          return await fetch(request);
+        } catch {
+          return new Response(OFFLINE_RESTRICTED_HTML, {
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+          });
+        }
+      })()
+    );
     return;
   }
 

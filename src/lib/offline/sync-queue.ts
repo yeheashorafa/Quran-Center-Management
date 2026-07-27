@@ -28,7 +28,8 @@ export type OfficialExamSyncPayload = {
   examType: "INDIVIDUAL" | "COLLECTIVE";
   juzFrom: number;
   juzTo: number;
-  score: number;
+  isNotPassed?: boolean;
+  score: number | null;
   notes: string;
   idempotencyKey?: string;
   studentName?: string;

@@ -12,6 +12,8 @@ import { getExaminerDataCache, saveExaminerDataCache } from "@/lib/offline/exami
 import { enqueueSyncItem, getAllSyncItems, processSyncQueue, type SyncQueueItem } from "@/lib/offline/sync-queue";
 import { QURAN_JUZS, getJuzLabel } from "@/lib/quran/juz-metadata";
 
+import { minimumPassingScore, officialExamResultLabel } from "@/lib/official-exams/grading";
+
 type Notice = { type: "success" | "error"; text: string } | null;
 type ExamFormState = {
   stageId: string;
@@ -21,6 +23,7 @@ type ExamFormState = {
   examType: "INDIVIDUAL" | "COLLECTIVE";
   juzFrom: string;
   juzTo: string;
+  isNotPassed: boolean;
   score: string;
   notes: string;
 };
@@ -60,13 +63,6 @@ function resultStyle(label: string | null): string {
   return "border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]";
 }
 
-function calculateResultLabel(score: number): string {
-  if (score >= 95) return "امتياز";
-  if (score >= 85) return "ممتاز";
-  if (score >= 75) return "جيد جداً";
-  return "ضعيف / أعيد";
-}
-
 export function ExaminerExamsPanel({
   options: initialOptions,
   initialExams,
@@ -89,6 +85,7 @@ export function ExaminerExamsPanel({
     examType: "COLLECTIVE",
     juzFrom: "1",
     juzTo: "1",
+    isNotPassed: false,
     score: "",
     notes: "",
   });
@@ -105,6 +102,7 @@ export function ExaminerExamsPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [createKey, setCreateKey] = useState(operationKey);
   const [editing, setEditing] = useState<OfficialExamListItem | null>(null);
+  const [deletingExam, setDeletingExam] = useState<OfficialExamListItem | null>(null);
 
   // Offline examiner status
   const [isOfflineMode, setIsOfflineMode] = useState(false);
@@ -264,11 +262,28 @@ export function ExaminerExamsPanel({
     setBusy("create");
     setNotice(null);
 
+    const minScore = minimumPassingScore(selectedStage?.code);
+    const isNotPassed = form.isNotPassed;
+
+    if (!isNotPassed) {
+      const scoreVal = Number(form.score);
+      if (!form.score || Number.isNaN(scoreVal)) {
+        showNotice("error", "أدخل الدرجة الرقمية أو اختر غير مجاز.");
+        setBusy(null);
+        return;
+      }
+      if (scoreVal < minScore) {
+        showNotice("error", "هذه العلامة أقل من الحد الأدنى للإجازة لهذه المرحلة.");
+        setBusy(null);
+        return;
+      }
+    }
+
     const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
 
     const juzFromNum = Number(form.juzFrom);
     const juzToNum = Number(form.examType === "INDIVIDUAL" ? form.juzFrom : form.juzTo);
-    const scoreNum = Number(form.score);
+    const scoreNum = isNotPassed ? null : Number(form.score);
     const student = formStudents.find((s) => s.id === form.studentId);
     const uniqueId = operationKey();
 
@@ -278,6 +293,7 @@ export function ExaminerExamsPanel({
       examType: form.examType,
       juzFrom: juzFromNum,
       juzTo: juzToNum,
+      isNotPassed,
       score: scoreNum,
       notes: form.notes,
       idempotencyKey: createKey,
@@ -295,13 +311,14 @@ export function ExaminerExamsPanel({
       });
 
       const nowIso = new Date().toISOString();
+      const resLabel = officialExamResultLabel(scoreNum, selectedStage?.code, isNotPassed);
       const tempExam: OfficialExamListItem = {
         id: `offline-${uniqueId}`,
         student: { id: form.studentId, displayName: student?.displayName || "طالب" },
         examDate: form.examDate,
         examType: form.examType,
         score: scoreNum,
-        resultLabel: calculateResultLabel(scoreNum),
+        resultLabel: resLabel,
         status: "ACTIVE",
         version: 1,
         notes: form.notes ? `[محفوظ أوفلاين] ${form.notes}` : "[محفوظ أوفلاين]",
@@ -332,9 +349,25 @@ export function ExaminerExamsPanel({
         }],
       };
 
-      setExams((current) => [tempExam, ...current]);
+      setExams((current) => {
+        const existingIdx = current.findIndex(
+          (e) =>
+            e.student.id === form.studentId &&
+            e.examType === form.examType &&
+            e.scopes[0]?.juzFrom === juzFromNum &&
+            e.scopes[0]?.juzTo === juzToNum &&
+            e.status === "ACTIVE",
+        );
+        if (existingIdx !== -1) {
+          const next = [...current];
+          next[existingIdx] = { ...tempExam, id: current[existingIdx].id };
+          return next;
+        }
+        return [tempExam, ...current];
+      });
+
       setCreateKey(operationKey());
-      setForm((current) => ({ ...current, score: "", notes: "" }));
+      setForm((current) => ({ ...current, score: "", notes: "", isNotPassed: false }));
       await refreshPendingExams();
       showNotice("success", "تم حفظ الاختبار محلياً بانتظار المزامنة عند عودة الإنترنت.");
       setBusy(null);
@@ -351,7 +384,7 @@ export function ExaminerExamsPanel({
       if (!response.ok) throw new Error(message);
 
       setCreateKey(operationKey());
-      setForm((current) => ({ ...current, score: "", notes: "" }));
+      setForm((current) => ({ ...current, score: "", notes: "", isNotPassed: false }));
       showNotice("success", message);
       await loadExams(filters, true);
     } catch (error) {
@@ -371,12 +404,12 @@ export function ExaminerExamsPanel({
   }
 
   function beginEdit(exam: OfficialExamListItem) {
-    if (exam.status !== "ACTIVE") return;
     if (exam.examType === "CUSTOM") {
       showNotice("error", "تعديل النطاق المخصص غير متاح في هذا النموذج حالياً.");
       return;
     }
     const scope = exam.scopes[0];
+    const isFailed = exam.score === null || exam.resultLabel === "غير مجاز";
     setEditing(exam);
     setForm({
       stageId: exam.enrollment?.stageId ?? "",
@@ -386,7 +419,8 @@ export function ExaminerExamsPanel({
       examType: exam.examType === "INDIVIDUAL" ? "INDIVIDUAL" : "COLLECTIVE",
       juzFrom: String(scope?.juzFrom ?? 1),
       juzTo: String(scope?.juzTo ?? scope?.juzFrom ?? 1),
-      score: String(exam.score ?? ""),
+      isNotPassed: isFailed,
+      score: exam.score !== null ? String(exam.score) : "",
       notes: exam.notes ?? "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -404,6 +438,7 @@ export function ExaminerExamsPanel({
       examType: "COLLECTIVE",
       juzFrom: "1",
       juzTo: "1",
+      isNotPassed: false,
       score: "",
       notes: "",
     });
@@ -415,6 +450,23 @@ export function ExaminerExamsPanel({
     setBusy("edit");
     setNotice(null);
 
+    const minScore = minimumPassingScore(selectedStage?.code);
+    const isNotPassed = form.isNotPassed;
+
+    if (!isNotPassed) {
+      const scoreVal = Number(form.score);
+      if (!form.score || Number.isNaN(scoreVal)) {
+        showNotice("error", "أدخل الدرجة الرقمية أو اختر غير مجاز.");
+        setBusy(null);
+        return;
+      }
+      if (scoreVal < minScore) {
+        showNotice("error", "هذه العلامة أقل من الحد الأدنى للإجازة لهذه المرحلة.");
+        setBusy(null);
+        return;
+      }
+    }
+
     try {
       const response = await fetch(`/api/examiner/exams/${editing.id}`, {
         method: "PATCH",
@@ -425,7 +477,8 @@ export function ExaminerExamsPanel({
           examType: form.examType,
           juzFrom: Number(form.juzFrom),
           juzTo: Number(form.examType === "INDIVIDUAL" ? form.juzFrom : form.juzTo),
-          score: Number(form.score),
+          isNotPassed,
+          score: isNotPassed ? null : Number(form.score),
           notes: form.notes,
           version: editing.version,
         }),
@@ -464,6 +517,45 @@ export function ExaminerExamsPanel({
     } finally {
       setBusy(null);
     }
+  }
+
+  async function confirmHardDelete() {
+    if (!deletingExam) return;
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      showNotice("error", "حذف الاختبار يحتاج اتصالاً بالإنترنت.");
+      setDeletingExam(null);
+      return;
+    }
+
+    setBusy(`delete-${deletingExam.id}`);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/examiner/exams/${deletingExam.id}`, {
+        method: "DELETE",
+      });
+      const message = await apiMessage(response);
+      if (!response.ok) throw new Error(message);
+
+      const nextList = exams.filter((item) => item.id !== deletingExam.id);
+      setExams(nextList);
+      setDeletingExam(null);
+      showNotice("success", "تم حذف الاختبار نهائياً.");
+      void saveExaminerDataCache("examiner", options, nextList);
+    } catch (error) {
+      showNotice("error", error instanceof Error ? error.message : "تعذر حذف الاختبار.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function cancelOfflineExamDraft(exam: OfficialExamListItem) {
+    if (!window.confirm("هل تريد إلغاء هذه المسودة المحلية لعدم إرسالها للشبكة؟")) return;
+    const nextList = exams.filter((i) => i.id !== exam.id);
+    setExams(nextList);
+    showNotice("success", "تم إلغاء المسودة المحلية.");
+    void saveExaminerDataCache("examiner", options, nextList);
   }
 
   const formSubmit = editing ? updateExam : createExam;
@@ -652,25 +744,59 @@ export function ExaminerExamsPanel({
             ) : null}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-[180px_minmax(0,1fr)]">
-            <div>
+          <div className="grid gap-4 sm:grid-cols-[240px_minmax(0,1fr)]">
+            <div className="space-y-2">
               <label className="form-label" htmlFor="exam-score">الدرجة من 100</label>
               <input
-                className="form-control text-center text-xl font-black"
+                className={`form-control text-center text-xl font-black ${
+                  form.isNotPassed ? "bg-[var(--card-soft)] opacity-50 cursor-not-allowed" : ""
+                }`}
                 id="exam-score"
                 type="number"
                 min="0"
                 max="100"
                 step="0.01"
-                value={form.score}
+                placeholder={form.isNotPassed ? "غير مجاز" : "أدخل العلامة"}
+                disabled={form.isNotPassed}
+                value={form.isNotPassed ? "" : form.score}
                 onChange={(event) => setForm((current) => ({ ...current, score: event.target.value }))}
-                required
+                required={!form.isNotPassed}
               />
+              <p className="text-[11px] font-bold text-[var(--gold)]">
+                {selectedStage?.code === "BRAAIM"
+                  ? "الحد الأدنى للإجازة في مرحلة البراعم هو 80."
+                  : selectedStage?.code === "ASHBAL"
+                    ? "الحد الأدنى للإجازة في مرحلة الأشبال هو 85."
+                    : selectedStage?.code === "NASHIEEN"
+                      ? "الحد الأدنى للإجازة في مرحلة الناشئين هو 85."
+                      : `الحد الأدنى للإجازة هو ${minimumPassingScore(selectedStage?.code)}.`}
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  id="exam-is-not-passed"
+                  type="checkbox"
+                  className="size-4 rounded border-[var(--border-color)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                  checked={form.isNotPassed}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      isNotPassed: event.target.checked,
+                      score: event.target.checked ? "" : current.score,
+                    }))
+                  }
+                />
+                <label
+                  htmlFor="exam-is-not-passed"
+                  className="text-xs font-black text-[var(--status-danger-text)] cursor-pointer select-none"
+                >
+                  غير مجاز (لم يجتز)
+                </label>
+              </div>
             </div>
             <div>
               <label className="form-label" htmlFor="exam-notes">ملاحظات</label>
               <textarea
-                className="form-control min-h-24"
+                className="form-control min-h-28"
                 id="exam-notes"
                 value={form.notes}
                 onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
@@ -802,7 +928,7 @@ export function ExaminerExamsPanel({
                 </div>
                 <div className="text-center">
                   <div className="text-4xl font-black text-[var(--primary)]">{exam.score ?? "—"}</div>
-                  <div className="text-xs font-bold text-[var(--text-muted)]">من 100</div>
+                  <div className="text-xs font-bold text-[var(--text-muted)]">{exam.score !== null ? "من 100" : "غير مجاز"}</div>
                 </div>
               </div>
 
@@ -811,7 +937,6 @@ export function ExaminerExamsPanel({
                 <p className="mt-3 rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-3 text-sm font-bold text-[var(--status-danger-text)]">سبب الإلغاء: {exam.voidReason}</p>
               ) : null}
 
-              {exam.status === "ACTIVE" ? (
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 py-2 text-sm font-black text-[var(--text-main)] hover:border-[var(--primary)] transition"
@@ -820,16 +945,35 @@ export function ExaminerExamsPanel({
                   >
                     تعديل
                   </button>
+                  {exam.status === "ACTIVE" ? (
+                    <button
+                      className="rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-2 text-sm font-black text-[var(--status-danger-text)] hover:opacity-90 disabled:opacity-60 transition"
+                      type="button"
+                      disabled={busy === `void-${exam.id}`}
+                      onClick={() => void voidExam(exam)}
+                    >
+                      {busy === `void-${exam.id}` ? "جاري الإلغاء..." : "إلغاء الاختبار"}
+                    </button>
+                  ) : null}
                   <button
-                    className="rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-2 text-sm font-black text-[var(--status-danger-text)] hover:opacity-90 disabled:opacity-60 transition"
+                    className="rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-2 text-sm font-black text-[var(--status-danger-text)] hover:opacity-90 disabled:opacity-50 transition"
                     type="button"
-                    disabled={busy === `void-${exam.id}`}
-                    onClick={() => void voidExam(exam)}
+                    disabled={busy === `delete-${exam.id}`}
+                    onClick={() => {
+                      if (exam.id.startsWith("offline-")) {
+                        void cancelOfflineExamDraft(exam);
+                        return;
+                      }
+                      if (isOfflineMode || isClientOffline) {
+                        showNotice("error", "حذف الاختبار يحتاج اتصالاً بالإنترنت.");
+                        return;
+                      }
+                      setDeletingExam(exam);
+                    }}
                   >
-                    {busy === `void-${exam.id}` ? "جاري الإلغاء..." : "إلغاء الاختبار"}
+                    {exam.id.startsWith("offline-") ? "إلغاء المسودة" : "حذف نهائي"}
                   </button>
                 </div>
-              ) : null}
             </article>
           ))
         ) : (
@@ -838,6 +982,51 @@ export function ExaminerExamsPanel({
           </div>
         )}
       </section>
+
+      {deletingExam ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150" dir="rtl">
+          <div className="w-full max-w-md rounded-3xl border border-[var(--status-danger-border)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)] space-y-4">
+            <div className="flex items-center gap-3 text-[var(--status-danger-text)]">
+              <div className="flex size-10 items-center justify-center rounded-2xl bg-[var(--status-danger-bg)] font-black text-lg">
+                ⚠️
+              </div>
+              <h3 className="text-lg font-black">حذف الاختبار نهائياً</h3>
+            </div>
+
+            <p className="text-sm leading-6 font-bold text-[var(--text-muted)]">
+              هل أنت متأكد من حذف هذا الاختبار نهائياً؟
+              <br />
+              سيتم حذف نتيجة الطالب لهذا النطاق من الأجزاء، ولا يمكن التراجع عن هذه العملية.
+            </p>
+
+            <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-soft)] p-3.5 text-xs space-y-1.5 font-bold">
+              <p><strong>الطالب:</strong> {deletingExam.student.displayName}</p>
+              <p><strong>النطاق:</strong> {deletingExam.scopes.map((s) => s.label).join("، ")}</p>
+              <p><strong>التاريخ:</strong> {deletingExam.examDate}</p>
+              <p><strong>النتيجة:</strong> {deletingExam.resultLabel ?? "غير مجاز"}</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 py-2.5 text-sm font-black text-[var(--text-main)] hover:bg-[var(--card-bg)] transition"
+                onClick={() => setDeletingExam(null)}
+                disabled={busy === `delete-${deletingExam.id}`}
+              >
+                تراجع
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-[var(--status-danger-text)] px-4 py-2.5 text-sm font-black text-white hover:opacity-90 transition disabled:opacity-50"
+                onClick={() => void confirmHardDelete()}
+                disabled={busy === `delete-${deletingExam.id}`}
+              >
+                {busy === `delete-${deletingExam.id}` ? "جاري الحذف..." : "نعم، حذف نهائي"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

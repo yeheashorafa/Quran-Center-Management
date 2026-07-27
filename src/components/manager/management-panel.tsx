@@ -75,6 +75,39 @@ export function ManagementPanel({
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [halaqaDeleteModal, setHalaqaDeleteModal] = useState<HalaqaDeleteModalState | null>(null);
 
+  // User Management Modals state
+  const [viewingUser, setViewingUser] = useState<{
+    id: string;
+    displayName: string;
+    username: string;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+    lastLoginAt: string | null;
+    roles: Array<{ code: string; nameAr: string }>;
+    activeHalaqat: Array<{ id: string; nameAr: string; stageName: string | null }>;
+    isCurrentUser: boolean;
+  } | null>(null);
+  const [editingUser, setEditingUser] = useState<{
+    id: string;
+    displayName: string;
+    username: string;
+    role: "TEACHER" | "CENTER_MANAGER" | "EXAMINER";
+    status: "ACTIVE" | "DISABLED";
+    isCurrentUser: boolean;
+  } | null>(null);
+
+  const [resettingUser, setResettingUser] = useState<{
+    id: string;
+    displayName: string;
+    username: string;
+  } | null>(null);
+  const [resetMode, setResetMode] = useState<"manual" | "generate">("manual");
+  const [manualPassword, setManualPassword] = useState("");
+  const [confirmManualPassword, setConfirmManualPassword] = useState("");
+  const [generatedPasswordResult, setGeneratedPasswordResult] = useState<string | null>(null);
+  const [copiedPassword, setCopiedPassword] = useState(false);
+
   const activeTeachers = useMemo(
     () =>
       data.users.filter(
@@ -334,6 +367,128 @@ export function ManagementPanel({
       showResult("error", error instanceof Error ? error.message : "تعذر حذف المستخدم.");
     } finally {
       setBusyKey(null);
+    }
+  }
+
+  async function openUserDetailsModal(userId: string) {
+    setBusyKey(`view-user-${userId}`);
+    try {
+      const response = await fetch(`/api/manager/users/${userId}`);
+      const apiData = await response.json();
+      if (!response.ok) throw new Error(apiData.message || "تعذر جلب تفاصيل المستخدم.");
+      setViewingUser(apiData.user);
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر جلب تفاصيل المستخدم.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  function openUserEditModal(user: ManagerDashboardData["users"][number]) {
+    const mainRoleCode = user.roles[0]?.code || "TEACHER";
+    setEditingUser({
+      id: user.id,
+      displayName: user.displayName,
+      username: user.username,
+      role: mainRoleCode as "TEACHER" | "CENTER_MANAGER" | "EXAMINER",
+      status: user.status === "DISABLED" ? "DISABLED" : "ACTIVE",
+      isCurrentUser: user.isCurrentUser,
+    });
+  }
+
+  async function saveUserEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingUser) return;
+
+    if (editingUser.isCurrentUser && editingUser.status === "DISABLED") {
+      showResult("error", "لا يمكنك إيقاف حسابك الحالي.");
+      return;
+    }
+    if (editingUser.isCurrentUser && editingUser.role !== "CENTER_MANAGER") {
+      showResult("error", "لا يمكنك إزالة صلاحية المدير عن حسابك الحالي.");
+      return;
+    }
+
+    setBusyKey(`save-user-${editingUser.id}`);
+    try {
+      const response = await fetch(`/api/manager/users/${editingUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: editingUser.displayName,
+          username: editingUser.username,
+          role: editingUser.role,
+          status: editingUser.status,
+        }),
+      });
+      const message = await readApiMessage(response);
+      if (!response.ok) throw new Error(message);
+
+      showResult("success", message);
+      setEditingUser(null);
+      router.refresh();
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر تحديث بيانات المستخدم.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  function openUserResetPasswordModal(user: ManagerDashboardData["users"][number]) {
+    setResettingUser({
+      id: user.id,
+      displayName: user.displayName,
+      username: user.username,
+    });
+    setResetMode("manual");
+    setManualPassword("");
+    setConfirmManualPassword("");
+    setGeneratedPasswordResult(null);
+    setCopiedPassword(false);
+  }
+
+  async function executePasswordReset() {
+    if (!resettingUser) return;
+
+    if (resetMode === "manual") {
+      if (!manualPassword || manualPassword.length < 6) {
+        showResult("error", "كلمة المرور الجديدة يجب أن تتكون من 6 خانات على الأقل.");
+        return;
+      }
+      if (manualPassword !== confirmManualPassword) {
+        showResult("error", "كلمتا المرور غير متطابقتين.");
+        return;
+      }
+    }
+
+    setBusyKey(`reset-pass-${resettingUser.id}`);
+    try {
+      const response = await fetch(`/api/manager/users/${resettingUser.id}/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: resetMode,
+          newPassword: resetMode === "manual" ? manualPassword : undefined,
+        }),
+      });
+      const apiData = await response.json();
+      if (!response.ok) throw new Error(apiData.message || "تعذر إعادة تعيين كلمة المرور.");
+
+      setGeneratedPasswordResult(apiData.temporaryPassword);
+      setCopiedPassword(false);
+      showResult("success", "تم إعادة تعيين كلمة المرور بنجاح. انسخ كلمة المرور الجديدة قبل إغلاق النافذة.");
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر إعادة تعيين كلمة المرور.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  function handleCopyPassword(text: string) {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      void navigator.clipboard.writeText(text);
+      setCopiedPassword(true);
+      setTimeout(() => setCopiedPassword(false), 3000);
     }
   }
 
@@ -712,43 +867,351 @@ export function ManagementPanel({
                   </div>
                 ) : null}
 
-                {user.status === "DISABLED" && !user.isCurrentUser ? (
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button
-                      className="min-h-11 rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-3 text-sm font-black text-[var(--status-success-text)] transition hover:opacity-90 disabled:opacity-60"
-                      disabled={busyKey !== null}
-                      onClick={() => requestUserStatusToggle(user.id, "ACTIVE", user.displayName)}
-                    >
-                      {busyKey === `user-${user.id}` ? "جاري التحديث..." : "تفعيل المستخدم"}
-                    </button>
-                    <button
-                      className="min-h-11 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 text-sm font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:opacity-60"
-                      disabled={busyKey !== null}
-                      onClick={() => requestUserPermanentDelete(user.id, user.displayName)}
-                    >
-                      {busyKey === `delete-user-${user.id}` ? "جاري الحذف..." : "حذف نهائي"}
-                    </button>
-                  </div>
-                ) : (
+                <div className="mt-4 flex flex-wrap gap-2 pt-3 border-t border-[var(--border-color)]">
                   <button
-                    className="mt-4 min-h-11 w-full rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 text-sm font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="min-h-10 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-3 text-xs font-black text-[var(--text-main)] transition hover:border-[var(--primary)] hover:text-[var(--primary)] disabled:opacity-60"
+                    disabled={busyKey !== null}
+                    type="button"
+                    onClick={() => void openUserDetailsModal(user.id)}
+                  >
+                    {busyKey === `view-user-${user.id}` ? "جاري التحميل..." : "عرض التفاصيل"}
+                  </button>
+
+                  <button
+                    className="min-h-10 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-3 text-xs font-black text-[var(--text-main)] transition hover:border-[var(--primary)] hover:text-[var(--primary)] disabled:opacity-60"
+                    disabled={busyKey !== null}
+                    type="button"
+                    onClick={() => openUserEditModal(user)}
+                  >
+                    تعديل
+                  </button>
+
+                  <button
+                    className="min-h-10 rounded-xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3 text-xs font-black text-[var(--status-warning-text)] transition hover:opacity-90 disabled:opacity-60"
+                    disabled={busyKey !== null}
+                    type="button"
+                    onClick={() => openUserResetPasswordModal(user)}
+                  >
+                    إعادة تعيين كلمة المرور
+                  </button>
+
+                  <button
+                    className="min-h-10 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 text-xs font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={busyKey !== null || user.isCurrentUser}
+                    type="button"
                     onClick={() => requestUserStatusToggle(user.id, user.status === "ACTIVE" ? "DISABLED" : "ACTIVE", user.displayName)}
                   >
                     {busyKey === `user-${user.id}`
                       ? "جاري التحديث..."
                       : user.isCurrentUser
-                        ? "لا يمكن إيقاف الحساب الحالي"
+                        ? "حسابك الحالي"
                         : user.status === "ACTIVE"
-                          ? "إيقاف المستخدم"
-                          : "تفعيل المستخدم"}
+                          ? "إيقاف"
+                          : "تفعيل"}
                   </button>
-                )}
+
+                  {user.status === "DISABLED" && !user.isCurrentUser ? (
+                    <button
+                      className="min-h-10 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 text-xs font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:opacity-60"
+                      disabled={busyKey !== null}
+                      type="button"
+                      onClick={() => requestUserPermanentDelete(user.id, user.displayName)}
+                    >
+                      {busyKey === `delete-user-${user.id}` ? "جاري الحذف..." : "حذف نهائي"}
+                    </button>
+                  ) : null}
+                </div>
               </article>
             ))}
           </section>
         </div>
       )}
+
+      {viewingUser ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150" dir="rtl">
+          <div className="w-full max-w-lg space-y-4 rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)]">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <h3 className="text-lg font-black text-[var(--text-main)] flex items-center gap-2">
+                <span>📋</span> تفاصيل المستخدم
+              </h3>
+              <button
+                type="button"
+                className="size-8 rounded-full bg-[var(--card-soft)] text-sm font-black text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                onClick={() => setViewingUser(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs font-bold">
+              <InfoItem label="الاسم الكامل" value={viewingUser.displayName} />
+              <InfoItem label="اسم المستخدم" value={`@${viewingUser.username}`} />
+              <InfoItem label="الحالة" value={viewingUser.status === "ACTIVE" ? "نشط" : viewingUser.status === "LOCKED" ? "موقوف مؤقتاً" : "معطل"} />
+              <InfoItem label="الأدوار" value={viewingUser.roles.map((r) => r.nameAr).join("، ") || "بدون"} />
+              <InfoItem label="تاريخ الإنشاء" value={new Date(viewingUser.createdAt).toLocaleDateString("ar-SA")} />
+              <InfoItem label="آخر دخول" value={viewingUser.lastLoginAt ? new Date(viewingUser.lastLoginAt).toLocaleString("ar-SA") : "لم يدخل بعد"} />
+            </div>
+
+            {viewingUser.activeHalaqat.length ? (
+              <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-soft)] p-3 space-y-1">
+                <p className="text-xs font-extrabold text-[var(--text-muted)]">الحلقات والمراحل المرتبطة:</p>
+                <div className="space-y-1 pt-1">
+                  {viewingUser.activeHalaqat.map((h) => (
+                    <div key={h.id} className="text-xs font-bold text-[var(--text-main)] flex justify-between">
+                      <span>• {h.nameAr}</span>
+                      {h.stageName ? <span className="text-[var(--text-muted)]">({h.stageName})</span> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-3 text-xs font-bold text-[var(--status-warning-text)] leading-6">
+              🔒 <strong>ملاحظة أمنية:</strong> كلمة المرور الحالية محميّة ومخزنة بنظام التشفير Argon2id ولن تُعرض هنا أو في أي مكان آخر لأسباب أمنية.
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                className="min-h-10 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-5 text-xs font-black text-[var(--text-main)] hover:bg-[var(--card-bg)]"
+                onClick={() => setViewingUser(null)}
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editingUser ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150" dir="rtl">
+          <form onSubmit={saveUserEdit} className="w-full max-w-md space-y-4 rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)]">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <h3 className="text-lg font-black text-[var(--text-main)] flex items-center gap-2">
+                <span>✏️</span> تعديل بيانات المستخدم
+              </h3>
+              <button
+                type="button"
+                className="size-8 rounded-full bg-[var(--card-soft)] text-sm font-black text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                onClick={() => setEditingUser(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs font-bold">
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1" htmlFor="edit-displayName">الاسم الظاهر الكامل:</label>
+                <input
+                  id="edit-displayName"
+                  className="form-control text-sm font-bold w-full rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] p-2.5 text-[var(--text-main)]"
+                  value={editingUser.displayName}
+                  onChange={(e) => setEditingUser({ ...editingUser, displayName: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1" htmlFor="edit-username">اسم المستخدم (Username):</label>
+                <input
+                  id="edit-username"
+                  className="form-control text-sm font-bold w-full rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] p-2.5 text-[var(--text-main)]"
+                  value={editingUser.username}
+                  onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1" htmlFor="edit-role">الدور / الصلاحية:</label>
+                <select
+                  id="edit-role"
+                  className="form-control text-sm font-bold w-full rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] p-2.5 text-[var(--text-main)]"
+                  value={editingUser.role}
+                  disabled={editingUser.isCurrentUser}
+                  onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as "TEACHER" | "CENTER_MANAGER" | "EXAMINER" })}
+                >
+                  <option value="TEACHER">شيخ / معلم حلقة (TEACHER)</option>
+                  <option value="EXAMINER">مختبر رسمي (EXAMINER)</option>
+                  <option value="CENTER_MANAGER">مدير المركز (CENTER_MANAGER)</option>
+                </select>
+                {editingUser.isCurrentUser ? (
+                  <p className="mt-1 text-[11px] text-[var(--status-warning-text)]">لا يمكنك تغيير دورك عن مدير المركز للحفاظ على إمكانية الوصول.</p>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1" htmlFor="edit-status">الحالة:</label>
+                <select
+                  id="edit-status"
+                  className="form-control text-sm font-bold w-full rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] p-2.5 text-[var(--text-main)]"
+                  value={editingUser.status}
+                  disabled={editingUser.isCurrentUser}
+                  onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value as "ACTIVE" | "DISABLED" })}
+                >
+                  <option value="ACTIVE">نشط (ACTIVE)</option>
+                  <option value="DISABLED">معطل (DISABLED)</option>
+                </select>
+                {editingUser.isCurrentUser ? (
+                  <p className="mt-1 text-[11px] text-[var(--status-warning-text)]">لا يمكنك تعطيل حسابك الحالي.</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                className="min-h-10 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-xs font-bold text-[var(--text-main)] hover:bg-[var(--card-bg)]"
+                onClick={() => setEditingUser(null)}
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                className="min-h-10 rounded-xl bg-[var(--primary)] px-5 text-xs font-black text-white hover:opacity-90 disabled:opacity-50"
+                disabled={busyKey === `save-user-${editingUser.id}`}
+              >
+                {busyKey === `save-user-${editingUser.id}` ? "جاري الحفظ..." : "حفظ التعديلات"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {resettingUser ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150" dir="rtl">
+          <div className="w-full max-w-md space-y-4 rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)]">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <h3 className="text-lg font-black text-[var(--text-main)] flex items-center gap-2">
+                <span>🔑</span> إعادة تعيين كلمة المرور
+              </h3>
+              <button
+                type="button"
+                className="size-8 rounded-full bg-[var(--card-soft)] text-sm font-black text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                onClick={() => setResettingUser(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-3 text-xs font-bold text-[var(--status-warning-text)] leading-6">
+              ⚠️ <strong>تحذير أمني:</strong> لا يمكن عرض كلمة المرور الحالية لأسباب أمنية. يمكنك فقط تعيين كلمة مرور جديدة.
+            </div>
+
+            <p className="text-xs font-bold text-[var(--text-muted)]">
+              المستخدم: <strong className="text-[var(--text-main)]">{resettingUser.displayName} (@{resettingUser.username})</strong>
+            </p>
+
+            {!generatedPasswordResult ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-[var(--card-soft)] p-1 border border-[var(--border-color)]">
+                  <button
+                    type="button"
+                    className={`min-h-9 rounded-xl text-xs font-black transition ${
+                      resetMode === "manual" ? "bg-[var(--primary)] text-white" : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                    }`}
+                    onClick={() => setResetMode("manual")}
+                  >
+                    إدخال يدوي
+                  </button>
+                  <button
+                    type="button"
+                    className={`min-h-9 rounded-xl text-xs font-black transition ${
+                      resetMode === "generate" ? "bg-[var(--primary)] text-white" : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                    }`}
+                    onClick={() => setResetMode("generate")}
+                  >
+                    توليد كلمة سر مؤقتة
+                  </button>
+                </div>
+
+                {resetMode === "manual" ? (
+                  <div className="space-y-3 text-xs font-bold">
+                    <div>
+                      <label className="block text-[var(--text-muted)] mb-1" htmlFor="reset-newPassword">كلمة المرور الجديدة:</label>
+                      <input
+                        id="reset-newPassword"
+                        type="password"
+                        className="form-control text-sm font-bold w-full rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] p-2.5 text-[var(--text-main)]"
+                        placeholder="أدخل 6 خانات على الأقل..."
+                        value={manualPassword}
+                        onChange={(e) => setManualPassword(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[var(--text-muted)] mb-1" htmlFor="reset-confirmPassword">تأكيد كلمة المرور الجديدة:</label>
+                      <input
+                        id="reset-confirmPassword"
+                        type="password"
+                        className="form-control text-sm font-bold w-full rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] p-2.5 text-[var(--text-main)]"
+                        placeholder="أعد كتابة كلمة المرور..."
+                        value={confirmManualPassword}
+                        onChange={(e) => setConfirmManualPassword(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-soft)] p-4 text-center text-xs font-bold text-[var(--text-muted)] space-y-2">
+                    <p>سيتم توليد كلمة سر عشوائية آمنة ومؤقتة للمستخدم.</p>
+                    <p className="text-[var(--primary)]">تظهر كلمة المرور مرة واحدة فقط عند التوليد ومزودة بفيشة نسخ.</p>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    className="min-h-10 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-xs font-bold text-[var(--text-main)] hover:bg-[var(--card-bg)]"
+                    onClick={() => setResettingUser(null)}
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    className="min-h-10 rounded-xl bg-[var(--primary)] px-5 text-xs font-black text-white hover:opacity-90 disabled:opacity-50"
+                    disabled={busyKey === `reset-pass-${resettingUser.id}`}
+                    onClick={() => void executePasswordReset()}
+                  >
+                    {busyKey === `reset-pass-${resettingUser.id}` ? "جاري التعيين..." : resetMode === "manual" ? "حفظ كلمة المرور الجديدة" : "توليد كلمة مرور مؤقتة الآن"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 pt-2">
+                <div className="rounded-2xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] p-4 text-xs font-bold text-[var(--status-success-text)] leading-6 space-y-1">
+                  <p className="text-sm font-black">✅ تم إعادة تعيين كلمة المرور بنجاح.</p>
+                  <p>انسخ كلمة المرور الجديدة قبل إغلاق هذه النافذة، حيث لن يتم عرضها مرة أخرى.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-extrabold text-[var(--text-muted)]">كلمة المرور الجديدة الصريحة:</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 rounded-xl border border-[var(--primary)] bg-[var(--card-soft)] p-3 text-center font-mono text-base font-black text-[var(--primary)] dir-ltr tracking-wider">
+                      {generatedPasswordResult}
+                    </div>
+                    <button
+                      type="button"
+                      className="min-h-12 rounded-xl bg-[var(--primary)] px-4 text-xs font-black text-white hover:opacity-90 transition"
+                      onClick={() => handleCopyPassword(generatedPasswordResult)}
+                    >
+                      {copiedPassword ? "تم النسخ! ✓" : "نسخ كلمة المرور"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    className="min-h-10 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-6 text-xs font-black text-[var(--text-main)] hover:bg-[var(--card-bg)]"
+                    onClick={() => setResettingUser(null)}
+                  >
+                    إغلاق النافذة
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {halaqaDeleteModal && halaqaDeleteModal.isOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs" dir="rtl">

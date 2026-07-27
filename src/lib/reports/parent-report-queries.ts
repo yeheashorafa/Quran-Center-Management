@@ -201,7 +201,7 @@ export async function getParentStudentReportData(
       else if (activity.type === "REVIEW") reviewPages += pages;
       else if (activity.type === "RECITATION") recitationPages += pages;
 
-      const text = activity.surahName ? `سورة ${activity.surahName}` : activity.notes || "";
+      const text = activity.notes || (activity.surahName ? `سورة ${activity.surahName}` : "");
       if (text && !latestAchievementText) {
         latestAchievementText = text;
       }

@@ -3,17 +3,39 @@
 import { useEffect, useMemo, useState } from "react";
 import { ParentReportSelector } from "@/components/reports/parent-report-selector";
 import { MonthlyReportsPanel } from "@/components/reports/monthly-reports-panel";
-import { SessionDetailModal, type SessionDetailData } from "@/components/sessions/session-detail-modal";
+import {
+  SessionDetailModal,
+  type SessionDetailData,
+} from "@/components/sessions/session-detail-modal";
 import { TeacherStudentsPanel } from "@/components/teacher/teacher-students-panel";
-import { QURAN_SURAHS, calculateAyahPageCount } from "@/lib/quran/metadata";
+import {
+  SurahActivityEditor,
+  JuzActivityEditor,
+} from "@/components/sessions/quran-activity-editor";
 import { NetworkStatusBar } from "@/components/offline/network-status-bar";
-import { getSessionDraft, removeSessionDraft, saveSessionDraft, type SessionDraftRecord } from "@/lib/offline/session-drafts";
-import { enqueueSyncItem, getAllSyncItems, type SyncQueueItem } from "@/lib/offline/sync-queue";
-import { getTeacherDataCache, saveTeacherDataCache } from "@/lib/offline/teacher-cache";
-import { getOfflineTeacherProfile, saveOfflineTeacherProfile } from "@/lib/offline/offline-profile";
+import {
+  getSessionDraft,
+  removeSessionDraft,
+  saveSessionDraft,
+  type SessionDraftRecord,
+} from "@/lib/offline/session-drafts";
+import {
+  enqueueSyncItem,
+  getAllSyncItems,
+  type SyncQueueItem,
+} from "@/lib/offline/sync-queue";
+import {
+  getTeacherDataCache,
+  saveTeacherDataCache,
+} from "@/lib/offline/teacher-cache";
+import {
+  getOfflineTeacherProfile,
+  saveOfflineTeacherProfile,
+} from "@/lib/offline/offline-profile";
 import { PendingSessionsList } from "@/components/offline/pending-sessions-list";
 import { TeacherExamsPanel } from "@/components/teacher/teacher-exams-panel";
 import type { OfficialExamListItem } from "@/lib/official-exams/types";
+import { WEEKDAY_LABELS } from "@/lib/halaqat/weekdays";
 import type {
   SessionActivityCode,
   SessionAttendanceCode,
@@ -22,36 +44,14 @@ import type {
   TeacherSessionEditorData,
 } from "@/lib/memorization-sessions/types";
 
-const ACTIVITY_LABELS: Record<
-  SessionActivityCode,
-  { label: string; icon: string; colorClass: string; bgClass: string; borderClass: string }
-> = {
-  MEMORIZATION: {
-    label: "حفظ جديد",
-    icon: "📖",
-    colorClass: "text-emerald-900 dark:text-emerald-300",
-    bgClass: "bg-emerald-50 dark:bg-[rgba(16,185,129,0.12)]",
-    borderClass: "border-emerald-300 dark:border-[rgba(16,185,129,0.35)]",
-  },
-  REVIEW: {
-    label: "مراجعة",
-    icon: "🔄",
-    colorClass: "text-blue-900 dark:text-blue-300",
-    bgClass: "bg-blue-50 dark:bg-[rgba(59,130,246,0.12)]",
-    borderClass: "border-blue-300 dark:border-[rgba(59,130,246,0.35)]",
-  },
-  RECITATION: {
-    label: "سرد",
-    icon: "🎙️",
-    colorClass: "text-purple-900 dark:text-purple-300",
-    bgClass: "bg-purple-50 dark:bg-[rgba(168,85,247,0.12)]",
-    borderClass: "border-purple-300 dark:border-[rgba(168,85,247,0.35)]",
-  },
-};
-
-async function readApiPayload(response: Response): Promise<{ message?: string; data?: TeacherSessionEditorData }> {
+async function readApiPayload(
+  response: Response,
+): Promise<{ message?: string; data?: TeacherSessionEditorData }> {
   try {
-    return (await response.json()) as { message?: string; data?: TeacherSessionEditorData };
+    return (await response.json()) as {
+      message?: string;
+      data?: TeacherSessionEditorData;
+    };
   } catch {
     return {};
   }
@@ -68,18 +68,27 @@ export function TeacherSessionPanel({
   initialDate: string;
   officialExams?: OfficialExamListItem[];
 }) {
-  const [activeTab, setActiveTab] = useState<"recitation" | "students" | "history" | "exams" | "parent_report" | "monthly_report">("recitation");
+  const [activeTab, setActiveTab] = useState<
+    | "recitation"
+    | "students"
+    | "history"
+    | "exams"
+    | "parent_report"
+    | "monthly_report"
+  >("recitation");
   const [halaqaId, setHalaqaId] = useState(initialHalaqaId);
   const [sessionDate, setSessionDate] = useState(initialDate);
   const [editor, setEditor] = useState<TeacherSessionEditorData | null>(null);
   const [students, setStudents] = useState<SessionStudentValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
-
-  // Client mount state for hydration mismatch prevention
-  const [isMounted, setIsMounted] = useState<boolean>(false);
+  const [notice, setNotice] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(
+    null,
+  );
 
   // Offline status & cache metadata
   const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
@@ -90,12 +99,17 @@ export function TeacherSessionPanel({
     let active = true;
     queueMicrotask(() => {
       if (active) {
-        setIsMounted(true);
-        setIsClientOffline(typeof navigator !== "undefined" && !navigator.onLine);
+        setIsClientOffline(
+          typeof navigator !== "undefined" && !navigator.onLine,
+        );
       }
     });
-    function handleOnline() { if (active) setIsClientOffline(false); }
-    function handleOffline() { if (active) setIsClientOffline(true); }
+    function handleOnline() {
+      if (active) setIsClientOffline(false);
+    }
+    function handleOffline() {
+      if (active) setIsClientOffline(true);
+    }
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     return () => {
@@ -106,16 +120,29 @@ export function TeacherSessionPanel({
   }, []);
 
   // Local Draft & Queue state
-  const [pendingDraft, setPendingDraft] = useState<SessionDraftRecord | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<SessionDraftRecord | null>(
+    null,
+  );
   const [offlineSyncItems, setOfflineSyncItems] = useState<SyncQueueItem[]>([]);
 
   // History inspection Modal state
-  const [selectedHistorySession, setSelectedHistorySession] = useState<SessionDetailData | null>(null);
+  const [selectedHistorySession, setSelectedHistorySession] =
+    useState<SessionDetailData | null>(null);
 
   const selectedHalaqa = useMemo(
-    () => dashboard.halaqat.find((item) => item.id === halaqaId) ?? dashboard.halaqat[0],
+    () =>
+      dashboard.halaqat.find((item) => item.id === halaqaId) ??
+      dashboard.halaqat[0],
     [dashboard.halaqat, halaqaId],
   );
+
+  const isAllowedSessionDay = isOfflineMode || (editor ? editor.allowed : true);
+
+  const scheduledWeekdaysText = useMemo(() => {
+    const weekdays = editor?.halaqa?.weekdays || selectedHalaqa?.weekdays || [];
+    if (!weekdays.length) return "غير محددة";
+    return weekdays.map((w) => WEEKDAY_LABELS[w]).join("، ");
+  }, [editor?.halaqa?.weekdays, selectedHalaqa?.weekdays]);
 
   useEffect(() => {
     if (!halaqaId || !sessionDate) return;
@@ -141,20 +168,38 @@ export function TeacherSessionPanel({
       cache: "no-store",
     })
       .then(async (response) => {
-        const payload = (await response.json().catch(() => ({}))) as TeacherSessionEditorData | { message?: string };
+        const payload = (await response.json().catch(() => ({}))) as
+          | TeacherSessionEditorData
+          | { message?: string };
         if (!response.ok) {
-          throw new Error("message" in payload ? payload.message || "تعذر تحميل الجلسة." : "تعذر تحميل الجلسة.");
+          throw new Error(
+            "message" in payload
+              ? payload.message || "تعذر تحميل الجلسة."
+              : "تعذر تحميل الجلسة.",
+          );
         }
         const data = payload as TeacherSessionEditorData;
         setEditor(data);
         setStudents(data.students);
         setIsOfflineMode(false);
 
-        const nowStr = new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }) + " - " + new Date().toLocaleDateString("ar-EG");
+        const nowStr =
+          new Date().toLocaleTimeString("ar-EG", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }) +
+          " - " +
+          new Date().toLocaleDateString("ar-EG");
         setLastCacheTime(nowStr);
 
         // Cache online data to IndexedDB for offline use
-        void saveTeacherDataCache("teacher", halaqaId, dashboard, data.students, data);
+        void saveTeacherDataCache(
+          "teacher",
+          halaqaId,
+          dashboard,
+          data.students,
+          data,
+        );
         void saveOfflineTeacherProfile({
           teacherId: "teacher",
           halaqaId,
@@ -187,7 +232,8 @@ export function TeacherSessionPanel({
               weekdayLabel: "الأحد",
               halaqa: {
                 id: halaqaId,
-                nameAr: profile?.halaqaName || selectedHalaqa?.nameAr || "الحلقة",
+                nameAr:
+                  profile?.halaqaName || selectedHalaqa?.nameAr || "الحلقة",
                 stageName: selectedHalaqa?.stageName || "",
                 weekdays: selectedHalaqa?.weekdays || [],
               },
@@ -196,7 +242,13 @@ export function TeacherSessionPanel({
             },
           );
           setIsOfflineMode(true);
-          const cacheDateStr = new Date(cache.cachedAt).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }) + " - " + new Date(cache.cachedAt).toLocaleDateString("ar-EG");
+          const cacheDateStr =
+            new Date(cache.cachedAt).toLocaleTimeString("ar-EG", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }) +
+            " - " +
+            new Date(cache.cachedAt).toLocaleDateString("ar-EG");
           setLastCacheTime(cacheDateStr);
 
           if (cache.students.length > 0) {
@@ -208,7 +260,10 @@ export function TeacherSessionPanel({
           setIsOfflineMode(true);
           setNotice({
             type: "error",
-            text: error instanceof Error ? error.message : "تعذر الاتصال بالشبكة ولم يتم العثور على بيانات طلاب محفوظة لهذه الحلقة.",
+            text:
+              error instanceof Error
+                ? error.message
+                : "تعذر الاتصال بالشبكة ولم يتم العثور على بيانات طلاب محفوظة لهذه الحلقة.",
           });
         }
       })
@@ -231,7 +286,10 @@ export function TeacherSessionPanel({
     if (pendingDraft) {
       setStudents(pendingDraft.students);
       setPendingDraft(null);
-      setNotice({ type: "success", text: "تم استرجاع المسودة المحلية المحفوظة على جهازك بنجاح." });
+      setNotice({
+        type: "success",
+        text: "تم استرجاع المسودة المحلية المحفوظة على جهازك بنجاح.",
+      });
     }
   }
 
@@ -258,29 +316,54 @@ export function TeacherSessionPanel({
       else if (student.attendance === "NOT_HEARD") notHeard += 1;
       else pending += 1;
 
-      pages += student.activities.reduce((sum, activity) => sum + Number(activity.pageCount || 0), 0);
+      pages += student.activities.reduce(
+        (sum, activity) => sum + Number(activity.pageCount || 0),
+        0,
+      );
     }
 
     return { present, absent, excused, notHeard, pending, pages };
   }, [students]);
 
-  function updateStudent(studentId: string, update: (student: SessionStudentValue) => SessionStudentValue) {
-    const updated = students.map((student) => (student.studentId === studentId ? update(student) : student));
+  function updateStudent(
+    studentId: string,
+    update: (student: SessionStudentValue) => SessionStudentValue,
+  ) {
+    const updated = students.map((student) =>
+      student.studentId === studentId ? update(student) : student,
+    );
     handleStudentsUpdate(updated);
   }
 
   function setAttendance(studentId: string, attendance: SessionAttendanceCode) {
-    updateStudent(studentId, (student) => ({
-      ...student,
-      attendance,
-      activities:
-        attendance === "NOT_HEARD" || attendance === "ABSENT" || attendance === "EXCUSED"
-          ? []
-          : student.activities,
-    }));
+    updateStudent(studentId, (student) => {
+      let activities = student.activities;
+      if (attendance === "PRESENT") {
+        if (!activities || activities.length === 0) {
+          activities = [
+            { type: "MEMORIZATION", text: "", pageCount: 0 },
+            { type: "REVIEW", text: "", pageCount: 0 },
+            { type: "RECITATION", text: "", pageCount: 0 },
+          ];
+        }
+      } else {
+        activities = [];
+      }
+
+      return {
+        ...student,
+        attendance,
+        activities,
+      };
+    });
   }
 
-  function updateActivityText(studentId: string, type: SessionActivityCode, text: string, pageCount: number) {
+  function updateActivityText(
+    studentId: string,
+    type: SessionActivityCode,
+    text: string,
+    pageCount: number,
+  ) {
     updateStudent(studentId, (student) => ({
       ...student,
       activities: student.activities.map((activity) =>
@@ -291,6 +374,14 @@ export function TeacherSessionPanel({
 
   async function saveStudents(studentIds: string[], complete: boolean) {
     if (!halaqaId || !sessionDate) return;
+
+    if (!isAllowedSessionDay) {
+      setNotice({
+        type: "error",
+        text: "لا يمكن تسجيل تسميع في يوم غير مخصص لهذه الحلقة.",
+      });
+      return;
+    }
 
     const items = students
       .filter((student) => studentIds.includes(student.studentId))
@@ -308,12 +399,22 @@ export function TeacherSessionPanel({
       return;
     }
 
-    if (complete && students.some((student) => student.attendance === "PENDING")) {
-      setNotice({ type: "error", text: "سجّل حالة جميع الطلاب قبل اعتماد الجلسة." });
+    if (
+      complete &&
+      students.some((student) => student.attendance === "PENDING")
+    ) {
+      setNotice({
+        type: "error",
+        text: "سجّل حالة جميع الطلاب قبل اعتماد الجلسة.",
+      });
       return;
     }
 
-    const key = complete ? "complete-session" : studentIds.length === 1 ? `student-${studentIds[0]}` : "save-all";
+    const key = complete
+      ? "complete-session"
+      : studentIds.length === 1
+        ? `student-${studentIds[0]}`
+        : "save-all";
     setBusyKey(key);
     setNotice(null);
 
@@ -340,20 +441,32 @@ export function TeacherSessionPanel({
     }
 
     try {
-      const response = await fetch(`/api/teacher/sessions/${halaqaId}/${sessionDate}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payloadData),
-      });
+      const response = await fetch(
+        `/api/teacher/sessions/${halaqaId}/${sessionDate}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payloadData),
+        },
+      );
       const payload = await readApiPayload(response);
       if (!response.ok) throw new Error(payload.message || "تعذر حفظ الجلسة.");
       if (payload.data) {
         setEditor(payload.data);
         setStudents(payload.data.students);
         void removeSessionDraft("teacher", halaqaId, sessionDate);
-        void saveTeacherDataCache("teacher", halaqaId, dashboard, payload.data.students, payload.data);
+        void saveTeacherDataCache(
+          "teacher",
+          halaqaId,
+          dashboard,
+          payload.data.students,
+          payload.data,
+        );
       }
-      setNotice({ type: "success", text: payload.message || "تم حفظ البيانات بنجاح." });
+      setNotice({
+        type: "success",
+        text: payload.message || "تم حفظ البيانات بنجاح.",
+      });
     } catch {
       // Fallback to offline queue if network fetch failed
       await enqueueSyncItem({
@@ -381,49 +494,45 @@ export function TeacherSessionPanel({
       <section className="rounded-3xl bg-gradient-to-l from-emerald-950 to-emerald-700 p-5 text-white shadow-lg shadow-emerald-950/10 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-bold text-emerald-100">لوحة المحفظ والشيخ</p>
+            <p className="text-xs font-bold text-emerald-100">
+              لوحة المحفظ والشيخ
+            </p>
             <h1 className="mt-1 text-2xl font-black sm:text-3xl">
               مرحباً، شيخنا الفاضل
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50">
-              تابع تسميع طلاب حلقتك، وسجّل الحضور والإنجازات اليومية، ويمكنك العمل بدون إنترنت ثم مزامنة البيانات عند عودة الاتصال.
+              تابع تسميع طلاب حلقتك، وسجّل الحضور والإنجازات اليومية، ويمكنك
+              العمل بدون إنترنت ثم مزامنة البيانات عند عودة الاتصال.
             </p>
           </div>
 
-          <div className="rounded-2xl bg-emerald-900/80 border border-emerald-500/30 p-3 text-xs font-bold text-emerald-100 min-w-48 text-center sm:text-right shrink-0">
-            <p className="text-[10px] text-emerald-300">حالة الاتصال والمزامنة:</p>
-            {isMounted ? (
-              isClientOffline ? (
-                <span className="text-amber-300 font-black flex items-center gap-1.5 justify-center sm:justify-start mt-1">
-                  <span>📡</span> غير متصل — يتم الحفظ محلياً
-                </span>
-              ) : offlineSyncItems.length > 0 ? (
-                <span className="text-amber-200 font-black flex items-center gap-1.5 justify-center sm:justify-start mt-1">
-                  <span>⏳</span> يوجد {offlineSyncItems.length} عمليات بانتظار المزامنة
-                </span>
-              ) : (
-                <span className="text-emerald-200 font-black flex items-center gap-1.5 justify-center sm:justify-start mt-1">
-                  <span>🟢</span> متصل بالإنترنت ومزامن
-                </span>
-              )
-            ) : (
-              <span className="text-emerald-300 font-bold mt-1 block">جاري التحقق...</span>
-            )}
+          <div className="rounded-2xl bg-white p-3 text-xs font-bold text-emerald-900 min-w-48 text-center sm:text-right shrink-0">
+            <p className="text-[13px] font-black text-emerald-900/80">
+              حالة الاتصال والمزامنة:
+            </p>
+            {/* Network Status & Offline Queue Monitoring */}
+            <NetworkStatusBar
+              onSyncCompleted={() =>
+                void getAllSyncItems().then(setOfflineSyncItems)
+              }
+            />
           </div>
         </div>
       </section>
 
-      {/* Network Status & Offline Queue Monitoring */}
-      <NetworkStatusBar onSyncCompleted={() => void getAllSyncItems().then(setOfflineSyncItems)} />
-
       {/* Offline Mode Last Cache Timestamp Banner (Requirement 5) */}
       {isOfflineMode || isClientOffline ? (
-        <aside aria-label="شريط وضع الأوفلاين" className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-3.5 text-xs font-bold text-[var(--status-warning-text)] shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <aside
+          aria-label="شريط وضع الأوفلاين"
+          className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-3.5 text-xs font-bold text-[var(--status-warning-text)] shadow-xs flex flex-wrap items-center justify-between gap-3"
+        >
           <div className="flex items-center gap-2">
             <span className="size-2.5 rounded-full bg-[var(--warning)] animate-pulse" />
             <span>
               أنت تعمل بدون إنترنت — آخر تحديث لبيانات الطلاب كان:{" "}
-              <strong className="font-black text-[var(--status-warning-text)]">{lastCacheTime || "غير محدد"}</strong>
+              <strong className="font-black text-[var(--status-warning-text)]">
+                {lastCacheTime || "غير محدد"}
+              </strong>
             </span>
           </div>
           <span className="rounded-lg border border-[var(--status-warning-border)] bg-[var(--card-bg)] px-2.5 py-1 text-[11px] font-black text-[var(--status-warning-text)]">
@@ -434,12 +543,18 @@ export function TeacherSessionPanel({
 
       {/* Local Draft Recovery Prompt Banner */}
       {pendingDraft ? (
-        <aside aria-label="استرجاع المسودة المحلية" className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-4 text-xs font-bold text-[var(--status-warning-text)] shadow-xs">
+        <aside
+          aria-label="استرجاع المسودة المحلية"
+          className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-4 text-xs font-bold text-[var(--status-warning-text)] shadow-xs"
+        >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <p className="font-black text-[var(--status-warning-text)] text-sm">⚠️ يوجد تسميع محفوظ محلياً لهذه الجلسة لم يتم رفعه بعد!</p>
+              <p className="font-black text-[var(--status-warning-text)] text-sm">
+                ⚠️ يوجد تسميع محفوظ محلياً لهذه الجلسة لم يتم رفعه بعد!
+              </p>
               <p className="mt-1 text-[var(--status-warning-text)] opacity-90">
-                عُثر على مسودة تسميع مخزنة محلياً على جهازك لم ترفع بعد. هل ترغب باسترجاعها أم إهمالها؟
+                عُثر على مسودة تسميع مخزنة محلياً على جهازك لم ترفع بعد. هل ترغب
+                باسترجاعها أم إهمالها؟
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -562,7 +677,9 @@ export function TeacherSessionPanel({
           <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="form-label" htmlFor="session-halaqa">الحلقة الدراسية</label>
+                <label className="form-label" htmlFor="session-halaqa">
+                  الحلقة الدراسية
+                </label>
                 {dashboard.halaqat.length > 1 ? (
                   <select
                     id="session-halaqa"
@@ -584,7 +701,9 @@ export function TeacherSessionPanel({
               </div>
 
               <div>
-                <label className="form-label" htmlFor="session-date">تاريخ التسميع</label>
+                <label className="form-label" htmlFor="session-date">
+                  تاريخ التسميع
+                </label>
                 <input
                   id="session-date"
                   className="form-control font-black"
@@ -601,18 +720,60 @@ export function TeacherSessionPanel({
           {loading ? (
             <div className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-12 text-center text-[var(--text-muted)] shadow-sm">
               <div className="mx-auto size-8 animate-spin rounded-full border-4 border-[var(--primary)] border-t-transparent" />
-              <p className="mt-4 text-sm font-bold">جاري تحميل طلاب الحلقة والجلسة...</p>
+              <p className="mt-4 text-sm font-bold">
+                جاري تحميل طلاب الحلقة والجلسة...
+              </p>
             </div>
-          ) : editor?.allowed || isOfflineMode ? (
+          ) : !isAllowedSessionDay ? (
+            <section className="rounded-3xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-6 sm:p-8 text-center text-[var(--status-danger-text)] shadow-sm space-y-4">
+              <span className="text-4xl block">🛑</span>
+              <h3 className="text-lg font-black leading-relaxed">
+                هذا اليوم ليس من أيام تحفيظ هذه الحلقة، ولا يمكنك تسجيل تسميع فيه.
+              </h3>
+              <p className="text-sm font-bold opacity-90 max-w-xl mx-auto">
+                أيام الحلقة هي: <strong className="font-black text-red-700 dark:text-red-300">{scheduledWeekdaysText}</strong>.
+              </p>
+              <div className="pt-2">
+                <span className="inline-block rounded-2xl bg-[var(--card-bg)] border border-[var(--status-danger-border)] px-5 py-2.5 text-xs font-black text-[var(--text-main)] shadow-xs">
+                  💡 اختر يوماً من أيام الحلقة لتسجيل التسميع.
+                </span>
+              </div>
+            </section>
+          ) : (
             <div className="space-y-4">
+
               {/* Quick Stats Bar */}
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                <StatCard label="الطلاب" value={students.length} color="bg-[var(--card-soft)] text-[var(--text-main)] border border-[var(--border-color)]" />
-                <StatCard label="حاضر" value={totals.present} color="bg-[var(--status-success-bg)] text-[var(--status-success-text)] border border-[var(--status-success-border)]" />
-                <StatCard label="غائب" value={totals.absent} color="bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border border-[var(--status-danger-border)]" />
-                <StatCard label="عذر" value={totals.excused} color="bg-[var(--status-info-bg)] text-[var(--status-info-text)] border border-[var(--status-info-border)]" />
-                <StatCard label="لم يسمع" value={totals.notHeard} color="bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] border border-[var(--status-warning-border)]" />
-                <StatCard label="صفحات" value={totals.pages} color="bg-[var(--card-soft)] text-[var(--gold)] border border-[var(--border-color)]" />
+                <StatCard
+                  label="الطلاب"
+                  value={students.length}
+                  color="bg-[var(--card-soft)] text-[var(--text-main)] border border-[var(--border-color)]"
+                />
+                <StatCard
+                  label="حاضر"
+                  value={totals.present}
+                  color="bg-[var(--status-success-bg)] text-[var(--status-success-text)] border border-[var(--status-success-border)]"
+                />
+                <StatCard
+                  label="غائب"
+                  value={totals.absent}
+                  color="bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border border-[var(--status-danger-border)]"
+                />
+                <StatCard
+                  label="عذر"
+                  value={totals.excused}
+                  color="bg-[var(--status-info-bg)] text-[var(--status-info-text)] border border-[var(--status-info-border)]"
+                />
+                <StatCard
+                  label="لم يسمع"
+                  value={totals.notHeard}
+                  color="bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] border border-[var(--status-warning-border)]"
+                />
+                <StatCard
+                  label="صفحات"
+                  value={totals.pages}
+                  color="bg-[var(--card-soft)] text-[var(--gold)] border border-[var(--border-color)]"
+                />
               </div>
 
               {/* Collapsible Student Recitation Cards */}
@@ -622,27 +783,55 @@ export function TeacherSessionPanel({
                   return (
                     <article
                       key={student.studentId}
-                      className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm transition hover:border-[var(--primary)] text-[var(--text-main)]"
+                      className={`rounded-3xl border bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 transition-all duration-200 ${
+                        student.attendance === "PRESENT"
+                          ? "border-[var(--status-success-border)]"
+                          : student.attendance === "ABSENT"
+                            ? "border-[var(--status-danger-border)]"
+                            : student.attendance === "EXCUSED"
+                              ? "border-[var(--status-info-border)]"
+                              : student.attendance === "NOT_HEARD"
+                                ? "border-[var(--status-warning-border)]"
+                                : "border-[var(--border-color)]"
+                      }`}
                     >
                       {/* Card Collapsible Header */}
                       <div
-                        onClick={() => setExpandedStudentId(isExpanded ? null : student.studentId)}
+                        onClick={() =>
+                          setExpandedStudentId(
+                            isExpanded ? null : student.studentId,
+                          )
+                        }
                         className="flex cursor-pointer items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3">
-                          <span className="flex size-9 items-center justify-center rounded-2xl bg-[var(--card-soft)] text-sm font-black text-[var(--text-main)] border border-[var(--border-color)]">
+                          <span
+                            className={`flex size-9 items-center justify-center rounded-2xl text-xs font-black shadow-xs ${
+                              student.attendance === "PRESENT"
+                                ? "bg-[var(--status-success-bg)] text-[var(--status-success-text)] border border-[var(--status-success-border)]"
+                                : student.attendance === "ABSENT"
+                                  ? "bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border border-[var(--status-danger-border)]"
+                                  : student.attendance === "EXCUSED"
+                                    ? "bg-[var(--status-info-bg)] text-[var(--status-info-text)] border border-[var(--status-info-border)]"
+                                    : student.attendance === "NOT_HEARD"
+                                      ? "bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] border border-[var(--status-warning-border)]"
+                                      : "bg-[var(--card-soft)] text-[var(--text-muted)] border border-[var(--border-color)]"
+                            }`}
+                          >
                             {student.attendance === "PRESENT"
-                              ? "✅"
+                              ? "✓"
                               : student.attendance === "ABSENT"
-                                ? "❌"
+                                ? "✗"
                                 : student.attendance === "EXCUSED"
-                                  ? "🔵"
+                                  ? "ع"
                                   : student.attendance === "NOT_HEARD"
-                                    ? "⚠️"
+                                    ? "!"
                                     : "⏳"}
                           </span>
                           <div>
-                            <h3 className="text-base font-black text-[var(--text-main)]">{student.displayName}</h3>
+                            <h3 className="text-base font-black text-[var(--text-main)]">
+                              {student.displayName}
+                            </h3>
                             <p className="text-xs font-bold text-[var(--text-muted)]">
                               {student.attendance === "PRESENT"
                                 ? "حاضر (اضغط لإدخال السور)"
@@ -674,12 +863,16 @@ export function TeacherSessionPanel({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (student.attendance !== "PRESENT" && student.attendance !== "NOT_HEARD") {
+                                  if (
+                                    student.attendance !== "PRESENT" &&
+                                    student.attendance !== "NOT_HEARD"
+                                  ) {
                                     setAttendance(student.studentId, "PRESENT");
                                   }
                                 }}
                                 className={`flex-1 rounded-2xl py-3 text-xs font-black transition ${
-                                  student.attendance === "PRESENT" || student.attendance === "NOT_HEARD"
+                                  student.attendance === "PRESENT" ||
+                                  student.attendance === "NOT_HEARD"
                                     ? "bg-emerald-600 text-white shadow-md"
                                     : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-emerald-500/10"
                                 }`}
@@ -690,12 +883,16 @@ export function TeacherSessionPanel({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (student.attendance !== "ABSENT" && student.attendance !== "EXCUSED") {
+                                  if (
+                                    student.attendance !== "ABSENT" &&
+                                    student.attendance !== "EXCUSED"
+                                  ) {
                                     setAttendance(student.studentId, "ABSENT");
                                   }
                                 }}
                                 className={`flex-1 rounded-2xl py-3 text-xs font-black transition ${
-                                  student.attendance === "ABSENT" || student.attendance === "EXCUSED"
+                                  student.attendance === "ABSENT" ||
+                                  student.attendance === "EXCUSED"
                                     ? "bg-red-600 text-white shadow-md"
                                     : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-red-500/10"
                                 }`}
@@ -705,11 +902,14 @@ export function TeacherSessionPanel({
                             </div>
 
                             {/* Level 2 for Present: Recited vs Not Recited */}
-                            {student.attendance === "PRESENT" || student.attendance === "NOT_HEARD" ? (
+                            {student.attendance === "PRESENT" ||
+                            student.attendance === "NOT_HEARD" ? (
                               <div className="flex gap-2 bg-[var(--card-soft)] p-2 rounded-2xl border border-[var(--border-color)]">
                                 <button
                                   type="button"
-                                  onClick={() => setAttendance(student.studentId, "PRESENT")}
+                                  onClick={() =>
+                                    setAttendance(student.studentId, "PRESENT")
+                                  }
                                   className={`flex-1 rounded-xl py-2 text-xs font-black transition ${
                                     student.attendance === "PRESENT"
                                       ? "bg-[var(--primary)] text-white shadow-sm"
@@ -721,7 +921,12 @@ export function TeacherSessionPanel({
 
                                 <button
                                   type="button"
-                                  onClick={() => setAttendance(student.studentId, "NOT_HEARD")}
+                                  onClick={() =>
+                                    setAttendance(
+                                      student.studentId,
+                                      "NOT_HEARD",
+                                    )
+                                  }
                                   className={`flex-1 rounded-xl py-2 text-xs font-black transition ${
                                     student.attendance === "NOT_HEARD"
                                       ? "bg-amber-600 text-white shadow-sm"
@@ -734,11 +939,14 @@ export function TeacherSessionPanel({
                             ) : null}
 
                             {/* Level 2 for Absent: Excused vs Unexcused */}
-                            {student.attendance === "ABSENT" || student.attendance === "EXCUSED" ? (
+                            {student.attendance === "ABSENT" ||
+                            student.attendance === "EXCUSED" ? (
                               <div className="flex gap-2 bg-[var(--card-soft)] p-2 rounded-2xl border border-[var(--border-color)]">
                                 <button
                                   type="button"
-                                  onClick={() => setAttendance(student.studentId, "EXCUSED")}
+                                  onClick={() =>
+                                    setAttendance(student.studentId, "EXCUSED")
+                                  }
                                   className={`flex-1 rounded-xl py-2 text-xs font-black transition ${
                                     student.attendance === "EXCUSED"
                                       ? "bg-blue-600 text-white shadow-sm"
@@ -750,7 +958,9 @@ export function TeacherSessionPanel({
 
                                 <button
                                   type="button"
-                                  onClick={() => setAttendance(student.studentId, "ABSENT")}
+                                  onClick={() =>
+                                    setAttendance(student.studentId, "ABSENT")
+                                  }
                                   className={`flex-1 rounded-xl py-2 text-xs font-black transition ${
                                     student.attendance === "ABSENT"
                                       ? "bg-red-700 text-white shadow-sm"
@@ -766,28 +976,63 @@ export function TeacherSessionPanel({
                           {/* Recitation Quran Surahs Input Area if PRESENT */}
                           {student.attendance === "PRESENT" ? (
                             <div className="space-y-4 rounded-2xl bg-[var(--card-soft)] p-4 border border-[var(--border-color)]">
-                              {student.activities.map((activity) => (
-                                <ActivityQuranSelector
-                                  key={activity.type}
-                                  activity={activity}
-                                  onChange={(text, pages) =>
-                                    updateActivityText(student.studentId, activity.type, text, pages)
-                                  }
-                                />
-                              ))}
+                              {student.activities.map((activity) =>
+                                activity.type === "RECITATION" ? (
+                                  <JuzActivityEditor
+                                    key={activity.type}
+                                    activity={activity}
+                                    onChange={(text, pages) =>
+                                      updateActivityText(
+                                        student.studentId,
+                                        activity.type,
+                                        text,
+                                        pages,
+                                      )
+                                    }
+                                  />
+                                ) : (
+                                  <SurahActivityEditor
+                                    key={activity.type}
+                                    activity={activity}
+                                    onChange={(text, pages) =>
+                                      updateActivityText(
+                                        student.studentId,
+                                        activity.type,
+                                        text,
+                                        pages,
+                                      )
+                                    }
+                                  />
+                                ),
+                              )}
                             </div>
                           ) : null}
 
                           {/* Student Notes */}
                           <div>
-                            <label className="form-label text-xs">ملاحظات المحفظ للطالب</label>
+                            <label className="form-label text-xs">
+                              {student.attendance === "NOT_HEARD"
+                                ? "ملاحظة / سبب عدم التسميع"
+                                : student.attendance === "EXCUSED"
+                                  ? "سبب العذر"
+                                  : "ملاحظات المحفظ للطالب"}
+                            </label>
                             <input
                               type="text"
-                              placeholder="أدخل ملاحظات خاصة إن وجدت..."
-                              className="form-control text-xs font-bold"
+                              placeholder={
+                                student.attendance === "NOT_HEARD"
+                                  ? "أدخل سبب عدم التسميع..."
+                                  : student.attendance === "EXCUSED"
+                                    ? "أدخل سبب عذر الطالب..."
+                                    : "أدخل ملاحظات خاصة إن وجدت..."
+                              }
+                              className="form-control font-bold"
                               value={student.notes || ""}
                               onChange={(e) =>
-                                updateStudent(student.studentId, (s) => ({ ...s, notes: e.target.value }))
+                                updateStudent(student.studentId, (s) => ({
+                                  ...s,
+                                  notes: e.target.value,
+                                }))
                               }
                             />
                           </div>
@@ -797,10 +1042,14 @@ export function TeacherSessionPanel({
                             <button
                               type="button"
                               disabled={busyKey === `student-${student.studentId}`}
-                              onClick={() => void saveStudents([student.studentId], false)}
+                              onClick={() =>
+                                void saveStudents([student.studentId], false)
+                              }
                               className="rounded-xl bg-[var(--primary)] px-4 py-2 text-xs font-black text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
                             >
-                              {busyKey === `student-${student.studentId}` ? "جاري الحفظ..." : "حفظ بيانات هذا الطالب فقط"}
+                              {busyKey === `student-${student.studentId}`
+                                ? "جاري الحفظ..."
+                                : "حفظ بيانات هذا الطالب فقط"}
                             </button>
                           </div>
                         </div>
@@ -813,21 +1062,29 @@ export function TeacherSessionPanel({
               {/* Complete Session Action Footer */}
               <div className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)]/95 p-4 shadow-xl backdrop-blur-md transition-colors duration-200">
                 <span className="text-xs font-black text-[var(--text-main)]">
-                  تم تسجيل: {totals.present + totals.absent + totals.excused + totals.notHeard} من {students.length} طالب
+                  تم تسجيل:{" "}
+                  {totals.present +
+                    totals.absent +
+                    totals.excused +
+                    totals.notHeard}{" "}
+                  من {students.length} طالب
                 </span>
                 <button
                   type="button"
                   disabled={busyKey === "complete-session"}
-                  onClick={() => void saveStudents(students.map((s) => s.studentId), true)}
+                  onClick={() =>
+                    void saveStudents(
+                      students.map((s) => s.studentId),
+                      true,
+                    )
+                  }
                   className="min-h-12 rounded-2xl bg-emerald-700 dark:bg-emerald-600 px-6 text-sm font-black text-white shadow-lg transition hover:bg-emerald-800 disabled:opacity-50"
                 >
-                  {busyKey === "complete-session" ? "جاري اعتماد الجلسة..." : "✅ اعتماد الجلسة بالكامل"}
+                  {busyKey === "complete-session"
+                    ? "جاري اعتماد الجلسة..."
+                    : "✅ اعتماد الجلسة بالكامل"}
                 </button>
               </div>
-            </div>
-          ) : (
-            <div className="rounded-3xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-6 text-center text-sm font-bold text-[var(--status-danger-text)]">
-              لا يمكن التسميع في هذا التاريخ لعدم مواءمته لجدول الحلقة.
             </div>
           )}
         </div>
@@ -854,7 +1111,9 @@ export function TeacherSessionPanel({
       {/* Tab 3: Saved History Sessions Tab */}
       {activeTab === "history" ? (
         <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-5 shadow-sm space-y-4 text-[var(--text-main)] transition-colors duration-200">
-          <h2 className="text-lg font-black text-[var(--text-main)]">سجل الجلسات التسميعية الأخيرة</h2>
+          <h2 className="text-lg font-black text-[var(--text-main)]">
+            سجل الجلسات التسميعية الأخيرة
+          </h2>
 
           {/* Pending Offline Sessions Queue Section (Requirement 7) */}
           <PendingSessionsList
@@ -893,8 +1152,13 @@ export function TeacherSessionPanel({
                 className="flex cursor-pointer items-center justify-between py-3 hover:bg-[var(--card-soft)] rounded-xl px-3 transition"
               >
                 <div>
-                  <span className="text-xs font-black text-[var(--primary)]">جلسة تاريخ: {session.sessionDate}</span>
-                  <p className="text-sm font-bold text-[var(--text-main)]">{session.halaqaName} ({session.recordedStudents}/{session.totalStudents} طالب)</p>
+                  <span className="text-xs font-black text-[var(--primary)]">
+                    جلسة تاريخ: {session.sessionDate}
+                  </span>
+                  <p className="text-sm font-bold text-[var(--text-main)]">
+                    {session.halaqaName} ({session.recordedStudents}/
+                    {session.totalStudents} طالب)
+                  </p>
                 </div>
                 <span className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1 text-xs font-black text-[var(--primary)]">
                   استعراض وتعديل الجلسة 🔍
@@ -915,13 +1179,23 @@ export function TeacherSessionPanel({
         isOfflineMode || isClientOffline ? (
           <aside className="rounded-3xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-6 text-center text-xs font-bold text-[var(--status-warning-text)] space-y-2">
             <span className="text-3xl block">📄</span>
-            <h3 className="text-sm font-black text-[var(--status-warning-text)]">تقرير ولي الأمر يحتاج إلى اتّصال بالإنترنت</h3>
+            <h3 className="text-sm font-black text-[var(--status-warning-text)]">
+              تقرير ولي الأمر يحتاج إلى اتّصال بالإنترنت
+            </h3>
             <p className="opacity-90">
-              استخراج وتوليد تقرير ولي الأمر يتطلب التواصل المباشر مع السيرفر. المتاح حالياً بدون نت هو شاشة التسميع اليومية.
+              استخراج وتوليد تقرير ولي الأمر يتطلب التواصل المباشر مع السيرفر.
+              المتاح حالياً بدون نت هو شاشة التسميع اليومية.
             </p>
           </aside>
         ) : (
-          <ParentReportSelector students={students.map((s) => ({ id: s.studentId, displayName: s.displayName }))} />
+          <ParentReportSelector
+            students={students.map((s) => ({
+              id: s.studentId,
+              displayName: s.displayName,
+            }))}
+            hideStageFilter={true}
+            hideTeacherFilter={true}
+          />
         )
       ) : null}
 
@@ -930,9 +1204,12 @@ export function TeacherSessionPanel({
         isOfflineMode || isClientOffline ? (
           <aside className="rounded-3xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-6 text-center text-xs font-bold text-[var(--status-warning-text)] space-y-2">
             <span className="text-3xl block">📊</span>
-            <h3 className="text-sm font-black text-[var(--status-warning-text)]">التقرير الشهري يحتاج إلى اتّصال بالإنترنت</h3>
+            <h3 className="text-sm font-black text-[var(--status-warning-text)]">
+              التقرير الشهري يحتاج إلى اتّصال بالإنترنت
+            </h3>
             <p className="opacity-90">
-              استخراج وتوليد التقارير الشهيرة ورسوم البيانات يتطلب الاتصال بالسيرفر. المتاح حالياً بدون نت هو شاشة التسميع اليومية.
+              استخراج وتوليد التقارير الشهيرة ورسوم البيانات يتطلب الاتصال
+              بالسيرفر. المتاح حالياً بدون نت هو شاشة التسميع اليومية.
             </p>
           </aside>
         ) : (
@@ -963,7 +1240,15 @@ export function TeacherSessionPanel({
   );
 }
 
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+function StatCard({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
   return (
     <div className={`rounded-2xl p-3 text-center ${color}`}>
       <span className="block text-[11px] font-bold opacity-80">{label}</span>
@@ -972,117 +1257,4 @@ function StatCard({ label, value, color }: { label: string; value: number; color
   );
 }
 
-/**
- * Component for selecting Quran Surah, fromAyah, toAyah with Full Surah button & auto page count
- */
-function ActivityQuranSelector({
-  activity,
-  onChange,
-}: {
-  activity: { type: SessionActivityCode; text: string; pageCount: number };
-  onChange: (text: string, pageCount: number) => void;
-}) {
-  const meta = ACTIVITY_LABELS[activity.type];
-  const [selectedSurahNumber, setSelectedSurahNumber] = useState<number>(1);
-  const [fromAyah, setFromAyah] = useState<number>(1);
-  const [toAyah, setToAyah] = useState<number>(7);
 
-  const selectedSurah = useMemo(
-    () => QURAN_SURAHS.find((s) => s.number === selectedSurahNumber) ?? QURAN_SURAHS[0]!,
-    [selectedSurahNumber],
-  );
-
-  function handleSurahChange(num: number) {
-    setSelectedSurahNumber(num);
-    const surah = QURAN_SURAHS.find((s) => s.number === num) ?? QURAN_SURAHS[0]!;
-    setFromAyah(1);
-    setToAyah(surah.totalAyahs);
-    const pages = calculateAyahPageCount(num, 1, surah.totalAyahs);
-    onChange(`سورة ${surah.nameAr} (من 1 إلى ${surah.totalAyahs})`, pages);
-  }
-
-  function handleFullSurah() {
-    setFromAyah(1);
-    setToAyah(selectedSurah.totalAyahs);
-    const pages = calculateAyahPageCount(selectedSurah.number, 1, selectedSurah.totalAyahs);
-    onChange(`سورة ${selectedSurah.nameAr} كاملة`, pages);
-  }
-
-  function handleAyahChange(from: number, to: number) {
-    const validFrom = Math.max(1, Math.min(from, selectedSurah.totalAyahs));
-    const validTo = Math.max(validFrom, Math.min(to, selectedSurah.totalAyahs));
-    setFromAyah(validFrom);
-    setToAyah(validTo);
-    const pages = calculateAyahPageCount(selectedSurah.number, validFrom, validTo);
-    onChange(`سورة ${selectedSurah.nameAr} (${validFrom} - ${validTo})`, pages);
-  }
-
-  return (
-    <div className={`rounded-2xl border p-3.5 space-y-3 ${meta.bgClass} ${meta.borderClass}`}>
-      <div className="flex items-center justify-between">
-        <span className={`text-xs font-black flex items-center gap-1.5 ${meta.colorClass}`}>
-          <span>{meta.icon}</span>
-          <span>{meta.label}</span>
-        </span>
-        <button
-          type="button"
-          onClick={handleFullSurah}
-          className="rounded-xl bg-[var(--card-bg)] px-2.5 py-1 text-[11px] font-black text-[var(--text-main)] border border-[var(--border-color)] hover:bg-[var(--card-soft)] transition"
-        >
-          🎯 السورة كاملة
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        {/* Surah Dropdown */}
-        <div>
-          <label className="text-[11px] font-bold text-[var(--text-muted)] block mb-1">اختر السورة:</label>
-          <select
-            value={selectedSurahNumber}
-            onChange={(e) => handleSurahChange(Number(e.target.value))}
-            className="form-control text-xs font-black"
-          >
-            {QURAN_SURAHS.map((s) => (
-              <option key={s.number} value={s.number}>
-                {s.number}. {s.nameAr} ({s.totalAyahs} آية)
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* From Ayah */}
-        <div>
-          <label className="text-[11px] font-bold text-[var(--text-muted)] block mb-1">من آية:</label>
-          <input
-            type="number"
-            min={1}
-            max={selectedSurah.totalAyahs}
-            value={fromAyah}
-            onChange={(e) => handleAyahChange(Number(e.target.value), toAyah)}
-            className="form-control text-xs font-black"
-          />
-        </div>
-
-        {/* To Ayah */}
-        <div>
-          <label className="text-[11px] font-bold text-[var(--text-muted)] block mb-1">إلى آية:</label>
-          <input
-            type="number"
-            min={1}
-            max={selectedSurah.totalAyahs}
-            value={toAyah}
-            onChange={(e) => handleAyahChange(fromAyah, Number(e.target.value))}
-            className="form-control text-xs font-black"
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between text-xs font-bold pt-1 text-[var(--text-main)]">
-        <span>النص المحسوب: {activity.text || `سورة ${selectedSurah.nameAr}`}</span>
-        <span className="rounded-md bg-[var(--card-bg)] px-2 py-0.5 font-black border border-[var(--border-color)] text-[var(--text-main)]">
-          الصفحات: {activity.pageCount} ص
-        </span>
-      </div>
-    </div>
-  );
-}

@@ -239,31 +239,6 @@ export async function getTeacherSessionEditorData(input: {
     },
   });
 
-  if (!allowed) {
-    return {
-      allowed: false,
-      reason: `التاريخ المختار يوافق يوم ${WEEKDAY_LABELS[weekday]}، وهو ليس من أيام الحلقة.`,
-      date: input.sessionDate,
-      weekday,
-      weekdayLabel: WEEKDAY_LABELS[weekday],
-      halaqa: {
-        id: assignment.halaqa.id,
-        nameAr: assignment.halaqa.nameAr,
-        stageName: assignment.halaqa.stage?.nameAr ?? "غير محددة",
-        weekdays,
-      },
-      session: session
-        ? {
-            id: session.id,
-            status: session.status,
-            version: session.version,
-            completedAt: session.completedAt?.toISOString() ?? null,
-          }
-        : null,
-      students: [],
-    };
-  }
-
   const enrollments = await prisma.studentEnrollment.findMany({
     where: {
       halaqaId: input.halaqaId,
@@ -299,8 +274,10 @@ export async function getTeacherSessionEditorData(input: {
   });
 
   return {
-    allowed: true,
-    reason: null,
+    allowed,
+    reason: allowed
+      ? null
+      : `التاريخ المختار يوافق يوم ${WEEKDAY_LABELS[weekday]}، وهو ليس من أيام تسميع هذه الحلقة. يمكنك اختيار يوم آخر لتسجيل جلسة.`,
     date: input.sessionDate,
     weekday,
     weekdayLabel: WEEKDAY_LABELS[weekday],

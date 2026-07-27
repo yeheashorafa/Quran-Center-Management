@@ -155,7 +155,7 @@ export function MonthlyReportsPanel({
             </div>
           </div>
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div>
               <label className="form-label" htmlFor="achieve-month">الشهر</label>
               <input
@@ -167,40 +167,44 @@ export function MonthlyReportsPanel({
               />
             </div>
 
-            <div>
-              <label className="form-label" htmlFor="achieve-stage">المرحلة</label>
-              <select
-                id="achieve-stage"
-                className="form-control font-bold"
-                value={achieveStageId}
-                onChange={(e) => {
-                  setAchieveStageId(e.target.value);
-                  setAchieveHalaqaId("");
-                }}
-              >
-                <option value="">كل المراحل</option>
-                {options.stages.map((stage) => (
-                  <option key={stage.id} value={stage.id}>{stage.nameAr}</option>
-                ))}
-              </select>
-            </div>
+            {options.roleCode !== "TEACHER" ? (
+              <div>
+                <label className="form-label" htmlFor="achieve-stage">المرحلة</label>
+                <select
+                  id="achieve-stage"
+                  className="form-control font-bold"
+                  value={achieveStageId}
+                  onChange={(e) => {
+                    setAchieveStageId(e.target.value);
+                    setAchieveHalaqaId("");
+                  }}
+                >
+                  <option value="">كل المراحل</option>
+                  {options.stages.map((stage) => (
+                    <option key={stage.id} value={stage.id}>{stage.nameAr}</option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
 
-            <div>
-              <label className="form-label" htmlFor="achieve-halaqa">الحلقة / الشيخ</label>
-              <select
-                id="achieve-halaqa"
-                className="form-control font-bold"
-                value={achieveHalaqaId}
-                onChange={(e) => setAchieveHalaqaId(e.target.value)}
-              >
-                <option value="">كل الحلقات</option>
-                {achieveHalaqat.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.nameAr}{h.teacherName ? ` — ${h.teacherName}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {options.roleCode !== "TEACHER" || achieveHalaqat.length > 1 ? (
+              <div>
+                <label className="form-label" htmlFor="achieve-halaqa">الحلقة</label>
+                <select
+                  id="achieve-halaqa"
+                  className="form-control font-bold"
+                  value={achieveHalaqaId}
+                  onChange={(e) => setAchieveHalaqaId(e.target.value)}
+                >
+                  {options.roleCode !== "TEACHER" ? <option value="">كل الحلقات</option> : <option value="">كل حلقاتي</option>}
+                  {achieveHalaqat.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.nameAr}{h.teacherName ? ` — ${h.teacherName}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -256,7 +260,7 @@ export function MonthlyReportsPanel({
             </div>
           </div>
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div>
               <label className="form-label" htmlFor="exam-month">الشهر</label>
               <input
@@ -268,40 +272,44 @@ export function MonthlyReportsPanel({
               />
             </div>
 
-            <div>
-              <label className="form-label" htmlFor="exam-stage">المرحلة</label>
-              <select
-                id="exam-stage"
-                className="form-control font-bold"
-                value={examStageId}
-                onChange={(e) => {
-                  setExamStageId(e.target.value);
-                  setExamHalaqaId("");
-                }}
-              >
-                <option value="">كل المراحل</option>
-                {options.stages.map((stage) => (
-                  <option key={stage.id} value={stage.id}>{stage.nameAr}</option>
-                ))}
-              </select>
-            </div>
+            {options.roleCode !== "TEACHER" ? (
+              <div>
+                <label className="form-label" htmlFor="exam-stage">المرحلة</label>
+                <select
+                  id="exam-stage"
+                  className="form-control font-bold"
+                  value={examStageId}
+                  onChange={(e) => {
+                    setExamStageId(e.target.value);
+                    setExamHalaqaId("");
+                  }}
+                >
+                  <option value="">كل المراحل</option>
+                  {options.stages.map((stage) => (
+                    <option key={stage.id} value={stage.id}>{stage.nameAr}</option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
 
-            <div>
-              <label className="form-label" htmlFor="exam-halaqa">الحلقة / الشيخ</label>
-              <select
-                id="exam-halaqa"
-                className="form-control font-bold"
-                value={examHalaqaId}
-                onChange={(e) => setExamHalaqaId(e.target.value)}
-              >
-                <option value="">كل الحلقات والمختبرين</option>
-                {examHalaqat.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.nameAr}{h.teacherName ? ` — ${h.teacherName}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {options.roleCode !== "TEACHER" || examHalaqat.length > 1 ? (
+              <div>
+                <label className="form-label" htmlFor="exam-halaqa">الحلقة</label>
+                <select
+                  id="exam-halaqa"
+                  className="form-control font-bold"
+                  value={examHalaqaId}
+                  onChange={(e) => setExamHalaqaId(e.target.value)}
+                >
+                  {options.roleCode !== "TEACHER" ? <option value="">كل الحلقات والمختبرين</option> : <option value="">كل حلقاتي</option>}
+                  {examHalaqat.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.nameAr}{h.teacherName ? ` — ${h.teacherName}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
           </div>
 
           {options.roleCode !== "TEACHER" ? (

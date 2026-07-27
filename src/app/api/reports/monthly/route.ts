@@ -43,9 +43,6 @@ export async function GET(request: NextRequest) {
     return errorResponse(parsed.error.issues[0]?.message ?? "خيارات التقرير غير صالحة.", 400);
   }
 
-  if (session.role.code === "TEACHER" && parsed.data.kind !== "COMPREHENSIVE") {
-    return errorResponse("الشيخ يستطيع تصدير تقرير حلقاته الشهري فقط.", 403);
-  }
   if (session.role.code === "EXAMINER" && parsed.data.kind !== "EXAMS") {
     return errorResponse("المختبر يستطيع تصدير تقرير الاختبارات الرسمية فقط.", 403);
   }

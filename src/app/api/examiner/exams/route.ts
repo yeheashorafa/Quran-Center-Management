@@ -12,7 +12,10 @@ import {
   dateOnlyToUtc,
   isFutureDateInPalestine,
 } from "@/lib/memorization-sessions/date";
-import { officialExamResultLabel } from "@/lib/official-exams/grading";
+import {
+  minimumPassingScore,
+  officialExamResultLabel,
+} from "@/lib/official-exams/grading";
 import { getOfficialExamList } from "@/lib/official-exams/queries";
 import {
   createOfficialExamSchema,
@@ -87,7 +90,7 @@ export async function POST(request: Request) {
           if (repeated.studentId !== parsed.data.studentId) {
             throw new ExamValidationError("معرف العملية مستخدم لاختبار آخر.", 409);
           }
-          return { id: repeated.id, repeated: true as const };
+          return { id: repeated.id, repeated: true as const, updated: false as const };
         }
 
         const student = await transaction.student.findFirst({
@@ -128,10 +131,26 @@ export async function POST(request: Request) {
         }
 
         const enrollment = student.enrollments[0];
-        const duplicate = await transaction.officialExam.findFirst({
+        const stageCode = enrollment.halaqa.stage?.code;
+        const minScore = minimumPassingScore(stageCode);
+        const isNotPassed = Boolean(parsed.data.isNotPassed);
+        const rawScore = parsed.data.score ?? null;
+
+        if (!isNotPassed) {
+          if (rawScore === null || rawScore === undefined || Number.isNaN(rawScore)) {
+            throw new ExamValidationError("أدخل الدرجة الرقمية أو اختر غير مجاز.", 400);
+          }
+          if (rawScore < minScore) {
+            throw new ExamValidationError("هذه العلامة أقل من الحد الأدنى للإجازة لهذه المرحلة.", 400);
+          }
+        }
+
+        const finalScore = isNotPassed ? null : rawScore;
+        const resultLabel = officialExamResultLabel(finalScore, stageCode, isNotPassed);
+
+        const existingExam = await transaction.officialExam.findFirst({
           where: {
             studentId: student.id,
-            examDate,
             examType: parsed.data.examType,
             status: "ACTIVE",
             scopes: {
@@ -142,20 +161,73 @@ export async function POST(request: Request) {
               },
             },
           },
-          select: { id: true },
+          select: {
+            id: true,
+            studentId: true,
+            examDate: true,
+            examType: true,
+            score: true,
+            resultLabel: true,
+            notes: true,
+            version: true,
+          },
         });
 
-        if (duplicate) {
-          throw new ExamValidationError(
-            "يوجد اختبار فعال لنفس الطالب والتاريخ والنطاق. عدّل الاختبار الموجود بدلاً من إنشاء نسخة أخرى.",
-            409,
-          );
-        }
+        if (existingExam) {
+          const updated = await transaction.officialExam.update({
+            where: { id: existingExam.id },
+            data: {
+              enrollmentId: enrollment.id,
+              examinerUserId: authorization.session.user.id,
+              examDate,
+              score: finalScore,
+              resultLabel,
+              notes: parsed.data.notes || null,
+              version: { increment: 1 },
+              updatedAt: new Date(),
+            },
+            select: { id: true },
+          });
 
-        const resultLabel = officialExamResultLabel(
-          parsed.data.score,
-          enrollment.halaqa.stage?.code,
-        );
+          await transaction.auditLog.create({
+            data: {
+              actorUserId: authorization.session.user.id,
+              action: "OFFICIAL_EXAM_UPDATED",
+              entityType: "official_exam",
+              entityId: existingExam.id,
+              requestId,
+              ipAddress,
+              userAgent,
+              oldValues: {
+                studentId: existingExam.studentId,
+                examDate: existingExam.examDate.toISOString().slice(0, 10),
+                examType: existingExam.examType,
+                score: existingExam.score === null ? null : Number(existingExam.score),
+                resultLabel: existingExam.resultLabel,
+                notes: existingExam.notes,
+                version: existingExam.version,
+              },
+              newValues: {
+                studentId: student.id,
+                studentName: student.displayName,
+                enrollmentId: enrollment.id,
+                halaqaId: enrollment.halaqa.id,
+                halaqaName: enrollment.halaqa.nameAr,
+                stageName: enrollment.halaqa.stage?.nameAr ?? null,
+                examDate: parsed.data.examDate,
+                examType: parsed.data.examType,
+                juzFrom: parsed.data.juzFrom,
+                juzTo: parsed.data.juzTo,
+                score: finalScore,
+                resultLabel,
+                notes: parsed.data.notes || null,
+                version: existingExam.version + 1,
+              },
+            },
+          });
+
+          return { id: updated.id, repeated: false as const, updated: true as const };
+        }
 
         const exam = await transaction.officialExam.create({
           data: {
@@ -165,7 +237,7 @@ export async function POST(request: Request) {
             createdByUserId: authorization.session.user.id,
             examDate,
             examType: parsed.data.examType,
-            score: parsed.data.score,
+            score: finalScore,
             resultLabel,
             notes: parsed.data.notes || null,
             idempotencyKey: parsed.data.idempotencyKey,
@@ -201,24 +273,28 @@ export async function POST(request: Request) {
               examType: parsed.data.examType,
               juzFrom: parsed.data.juzFrom,
               juzTo: parsed.data.juzTo,
-              score: parsed.data.score,
+              score: finalScore,
               resultLabel,
               notes: parsed.data.notes || null,
             },
           },
         });
 
-        return { id: exam.id, repeated: false as const };
+        return { id: exam.id, repeated: false as const, updated: false as const };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
     return NextResponse.json(
       {
-        message: result.repeated ? "تم حفظ هذا الاختبار مسبقاً." : "تم حفظ الاختبار الرسمي بنجاح.",
+        message: result.repeated
+          ? "تم حفظ هذا الاختبار مسبقاً."
+          : result.updated
+            ? "تم تحديث نتيجة الاختبار الرسمي بنجاح."
+            : "تم حفظ الاختبار الرسمي بنجاح.",
         exam: { id: result.id },
       },
-      { status: result.repeated ? 200 : 201 },
+      { status: result.repeated ? 200 : result.updated ? 200 : 201 },
     );
   } catch (error) {
     if (error instanceof ExamValidationError) {

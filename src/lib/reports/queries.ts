@@ -63,6 +63,47 @@ function examStatusLabel(status: string): string {
 }
 
 import { getJuzLabel } from "@/lib/quran/juz-metadata";
+import { QURAN_SURAHS } from "@/lib/quran/metadata";
+
+function extractSurahEntries(activity: {
+  surahName?: string | null;
+  fromAyah?: number | null;
+  toAyah?: number | null;
+  notes?: string | null;
+}): Array<{ surahName: string; fromAyah: number | null; toAyah: number | null }> {
+  if (activity.notes) {
+    const parts = activity.notes.split("|").map((p) => p.trim());
+    const result: Array<{ surahName: string; fromAyah: number | null; toAyah: number | null }> = [];
+    for (const part of parts) {
+      const surah = QURAN_SURAHS.find((s) => part.includes(s.nameAr));
+      if (surah) {
+        let fromAyah: number | null = 1;
+        let toAyah: number | null = surah.totalAyahs;
+        const rangeMatch =
+          part.match(/\((\d+)\s*-\s*(\d+)\)/) ||
+          part.match(/من\s*(\d+)\s*إلى\s*(\d+)/);
+        if (rangeMatch && rangeMatch[1] && rangeMatch[2]) {
+          fromAyah = Number(rangeMatch[1]);
+          toAyah = Number(rangeMatch[2]);
+        }
+        result.push({ surahName: surah.nameAr, fromAyah, toAyah });
+      }
+    }
+    if (result.length > 0) return result;
+  }
+
+  if (activity.surahName) {
+    return [
+      {
+        surahName: activity.surahName,
+        fromAyah: activity.fromAyah ?? null,
+        toAyah: activity.toAyah ?? null,
+      },
+    ];
+  }
+
+  return [];
+}
 
 function scopeLabel(scope: {
   type: string;
@@ -408,13 +449,16 @@ export async function getMonthlyReportData(
           if (activity.type === "MEMORIZATION") {
             memorizationPages += pages;
             row.memorizationPages += pages;
-            if (activity.surahName) {
-              if (!row.startSurah) {
-                row.startSurah = activity.surahName;
-                row.startAyah = activity.fromAyah ?? null;
+            const surahEntries = extractSurahEntries(activity);
+            for (const entry of surahEntries) {
+              if (entry.surahName) {
+                if (!row.startSurah) {
+                  row.startSurah = entry.surahName;
+                  row.startAyah = entry.fromAyah ?? null;
+                }
+                row.endSurah = entry.surahName;
+                row.endAyah = entry.toAyah ?? null;
               }
-              row.endSurah = activity.surahName;
-              row.endAyah = activity.toAyah ?? null;
             }
           } else if (activity.type === "REVIEW") {
             reviewPages += pages;

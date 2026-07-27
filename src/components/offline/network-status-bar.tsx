@@ -98,33 +98,33 @@ export function NetworkStatusBar({
   return (
     <aside
       aria-label="حالة الاتصال والمزامنة"
-      className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-bg)] p-3 shadow-xs transition mb-4"
+      className=""
     >
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-bold">
         {/* Status Indicator */}
         <div className="flex items-center gap-2">
           {!isOnline ? (
-            <div className="flex items-center gap-2 rounded-xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3 py-1.5 text-[var(--status-warning-text)]">
+            <div className="flex items-center gap-2  px-3 py-1.5 text-[var(--status-warning-text)]">
               <span className="size-2.5 rounded-full bg-[var(--gold)] animate-pulse" />
               <span> غير متصل — يتم حفظ التغييرات محلياً</span>
             </div>
           ) : syncStatus === "syncing" ? (
-            <div className="flex items-center gap-2 rounded-xl border border-[var(--status-info-border)] bg-[var(--status-info-bg)] px-3 py-1.5 text-[var(--status-info-text)]">
+            <div className="flex items-center gap-2 rounded-xl border  px-3 py-1.5 text-[var(--status-info-text)]">
               <span className="size-2.5 rounded-full bg-blue-600 animate-spin" />
               <span> جاري مزامنة البيانات مع الخادم...</span>
             </div>
           ) : syncStatus === "failed" ? (
-            <div className="flex items-center gap-2 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 py-1.5 text-[var(--status-danger-text)]">
+            <div className="flex items-center gap-2 rounded-xl   px-3 py-1.5 text-[var(--status-danger-text)]">
               <span className="size-2.5 rounded-full bg-red-600" />
               <span> تعذر مزامنة بعض البيانات</span>
             </div>
           ) : syncStatus === "synced" && pendingCount === 0 ? (
-            <div className="flex items-center gap-2 rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-3 py-1.5 text-[var(--status-success-text)]">
+            <div className="flex items-center gap-2 rounded-xl px-3 py-1.5 text-[var(--status-success-text)]">
               <span className="size-2.5 rounded-full bg-[var(--primary)]" />
               <span> متصل وتمت المزامنة بنجاح</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-3 py-1.5 text-[var(--status-success-text)]">
+            <div className="flex items-center gap-2 rounded-xl px-3 py-1.5 text-[var(--status-success-text)]">
               <span className="size-2.5 rounded-full bg-[var(--primary)]" />
               <span> متصل بالإنترنت</span>
             </div>
