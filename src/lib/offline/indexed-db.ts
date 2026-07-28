@@ -1,7 +1,7 @@
 "use client";
 
 const DB_NAME = "qcm_offline_db";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 export const STORES = {
   SESSION_DRAFTS: "session_drafts",
@@ -9,6 +9,7 @@ export const STORES = {
   OFFLINE_PROFILE: "offline_user_profile",
   TEACHER_CACHE: "teacher_cache",
   EXAMINER_CACHE: "examiner_cache",
+  MANAGER_CACHE: "manager_cache",
 } as const;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -47,6 +48,10 @@ export function getOfflineDb(): Promise<IDBDatabase> {
 
       if (!db.objectStoreNames.contains(STORES.EXAMINER_CACHE)) {
         db.createObjectStore(STORES.EXAMINER_CACHE, { keyPath: "id" });
+      }
+
+      if (!db.objectStoreNames.contains(STORES.MANAGER_CACHE)) {
+        db.createObjectStore(STORES.MANAGER_CACHE, { keyPath: "id" });
       }
     };
 

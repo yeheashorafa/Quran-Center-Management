@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { AppRoleCode } from "@/lib/auth/constants";
 import { WEEKDAY_CODES, WEEKDAY_LABELS, type WeekdayCode } from "@/lib/halaqat/weekdays";
@@ -16,6 +16,7 @@ import { ParentReportSelector } from "@/components/reports/parent-report-selecto
 import type { ManagerDailyMonitoringData } from "@/lib/manager-monitoring/types";
 import type { MonthlyReportOptions } from "@/lib/reports/types";
 import type { OfficialExamListItem } from "@/lib/official-exams/types";
+import { saveManagerDataCache } from "@/lib/offline/manager-cache";
 
 type ActiveTab = "monitoring" | "alerts" | "followup" | "exams" | "reports" | "parent_report" | "students" | "halaqat" | "users" | "audit";
 
@@ -62,18 +63,34 @@ export function ManagementPanel({
   reportOptions,
   officialExams = [],
   initialTab = "monitoring",
+  isOffline = false,
 }: {
   data: ManagerDashboardData;
   monitoringData: ManagerDailyMonitoringData;
   reportOptions?: MonthlyReportOptions;
   officialExams?: OfficialExamListItem[];
   initialTab?: ActiveTab;
+  isOffline?: boolean;
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [halaqaDeleteModal, setHalaqaDeleteModal] = useState<HalaqaDeleteModalState | null>(null);
+
+  // Automatically save snapshot to IndexedDB when viewing online
+  useEffect(() => {
+    if (!isOffline && typeof window !== "undefined" && data && monitoringData) {
+      void saveManagerDataCache(
+        "manager",
+        "مدير المركز",
+        data,
+        monitoringData,
+        officialExams,
+        reportOptions,
+      );
+    }
+  }, [isOffline, data, monitoringData, officialExams, reportOptions]);
 
   // User Management Modals state
   const [viewingUser, setViewingUser] = useState<{
@@ -143,6 +160,10 @@ export function ManagementPanel({
 
   async function createHalaqa(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      showResult("error", "هذه العملية تحتاج اتصالاً بالإنترنت.");
+      return;
+    }
     const form = event.currentTarget;
     const formData = new FormData(form);
     setBusyKey("create-halaqa");
@@ -178,6 +199,10 @@ export function ManagementPanel({
 
   async function createUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      showResult("error", "هذه العملية تحتاج اتصالاً بالإنترنت.");
+      return;
+    }
     const form = event.currentTarget;
     const formData = new FormData(form);
     setBusyKey("create-user");
@@ -777,7 +802,7 @@ export function ManagementPanel({
           </section>
         </div>
       ) : activeTab === "students" ? (
-        <StudentManagementPanel students={data.students} halaqat={data.studentHalaqat} />
+        <StudentManagementPanel students={data.students} halaqat={data.studentHalaqat} isOffline={isOffline} />
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] text-[var(--text-main)]">
           <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5">

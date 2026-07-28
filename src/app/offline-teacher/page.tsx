@@ -72,6 +72,7 @@ export default function OfflineTeacherPage() {
         initialHalaqaId={cache.halaqaId || cache.dashboard.halaqat[0]?.id || ""}
         initialDate={todayInPalestine()}
         officialExams={[]}
+        offlineOnly={true}
       />
     </div>
   );

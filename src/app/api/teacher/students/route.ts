@@ -8,11 +8,30 @@ import { getRequestIp, getRequestUserAgent, isSameOriginRequest } from "@/lib/ht
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const ARABIC_REGEX = /^[\u0600-\u06FF\s]+$/;
+const PHONE_REGEX = /^[0-9]{7,15}$/;
+
 const addTeacherStudentSchema = z.object({
   halaqaId: z.string().uuid("معرف الحلقة غير صالح."),
-  fullName: z.string().trim().min(3, "يجب أن يتكون اسم الطالب من 3 أحرف على الأقل."),
-  displayName: z.string().trim().min(2, "يجب أن يتكون اسم العرض من حرفين على الأقل."),
-  parentPhone: z.string().trim().nullable().optional(),
+  fullName: z
+    .string()
+    .trim()
+    .min(3, "يجب أن يتكون اسم الطالب من 3 أحرف على الأقل.")
+    .regex(ARABIC_REGEX, "اكتب الاسم الكامل باللغة العربية فقط."),
+  displayName: z
+    .string()
+    .trim()
+    .min(2, "يجب أن يتكون اسم العرض من حرفين على الأقل.")
+    .regex(ARABIC_REGEX, "اكتب اسم العرض باللغة العربية فقط."),
+  parentPhone: z
+    .string()
+    .trim()
+    .nullable()
+    .optional()
+    .transform((val) => (val === "" ? null : val))
+    .refine((val) => val === null || val === undefined || PHONE_REGEX.test(val), {
+      message: "رقم الهاتف يجب أن يحتوي على أرقام فقط (من 7 إلى 15 رقم).",
+    }),
   gradeLevel: z.string().trim().nullable().optional(),
   memorizationStartedOn: z.string().trim().nullable().optional(),
 });
@@ -137,9 +156,25 @@ export async function POST(request: Request) {
 
 const updateTeacherStudentSchema = z.object({
   studentId: z.string().uuid("معرف الطالب غير صالح."),
-  fullName: z.string().trim().min(3, "يجب أن يتكون اسم الطالب من 3 أحرف على الأقل."),
-  displayName: z.string().trim().min(2, "يجب أن يتكون اسم العرض من حرفين على الأقل."),
-  parentPhone: z.string().trim().nullable().optional(),
+  fullName: z
+    .string()
+    .trim()
+    .min(3, "يجب أن يتكون اسم الطالب من 3 أحرف على الأقل.")
+    .regex(ARABIC_REGEX, "اكتب الاسم الكامل باللغة العربية فقط."),
+  displayName: z
+    .string()
+    .trim()
+    .min(2, "يجب أن يتكون اسم العرض من حرفين على الأقل.")
+    .regex(ARABIC_REGEX, "اكتب اسم العرض باللغة العربية فقط."),
+  parentPhone: z
+    .string()
+    .trim()
+    .nullable()
+    .optional()
+    .transform((val) => (val === "" ? null : val))
+    .refine((val) => val === null || val === undefined || PHONE_REGEX.test(val), {
+      message: "رقم الهاتف يجب أن يحتوي على أرقام فقط (من 7 إلى 15 رقم).",
+    }),
   gradeLevel: z.string().trim().nullable().optional(),
   memorizationStartedOn: z.string().trim().nullable().optional(),
   notes: z.string().trim().nullable().optional(),
@@ -293,6 +328,22 @@ export async function DELETE(request: Request) {
   });
 
   if (!enrollment) {
+    const inactiveEnrollment = await prisma.studentEnrollment.findFirst({
+      where: {
+        studentId,
+        halaqaId,
+        deletedAt: null,
+        status: "INACTIVE",
+      },
+    });
+
+    if (inactiveEnrollment) {
+      return NextResponse.json(
+        { message: "تمت إزالة الطالب من الحلقة مسبقاً." },
+        { status: 200 },
+      );
+    }
+
     return errorResponse("تسجيل الطالب في هذه الحلقة غير موجود أو غير نشط.", 404);
   }
 

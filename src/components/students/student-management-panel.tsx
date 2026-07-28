@@ -39,9 +39,11 @@ async function readApiMessage(response: Response): Promise<string> {
 export function StudentManagementPanel({
   students,
   halaqat,
+  isOffline = false,
 }: {
   students: ManagerStudentItem[];
   halaqat: StudentHalaqaOption[];
+  isOffline?: boolean;
 }) {
   const router = useRouter();
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -77,6 +79,10 @@ export function StudentManagementPanel({
 
   async function createStudent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      showResult("error", "هذه العملية تحتاج اتصالاً بالإنترنت.");
+      return;
+    }
     const form = event.currentTarget;
     const formData = new FormData(form);
     setBusyKey("create-student");
@@ -114,6 +120,10 @@ export function StudentManagementPanel({
   async function updateStudent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingStudent) return;
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      showResult("error", "هذه العملية تحتاج اتصالاً بالإنترنت.");
+      return;
+    }
 
     setBusyKey(`edit-student-${editingStudent.id}`);
     setNotice(null);
@@ -148,6 +158,10 @@ export function StudentManagementPanel({
   }
 
   async function toggleStudentStatus(studentId: string, currentIsActive: boolean) {
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      showResult("error", "هذه العملية تحتاج اتصالاً بالإنترنت.");
+      return;
+    }
     setBusyKey(`status-student-${studentId}`);
     setNotice(null);
 
@@ -174,6 +188,10 @@ export function StudentManagementPanel({
   }
 
   async function removeStudentFromHalaqa(studentId: string, halaqaName: string) {
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      showResult("error", "هذه العملية تحتاج اتصالاً بالإنترنت.");
+      return;
+    }
     if (!confirm(`هل أنت متأكد من إزالة الطالب من (${halaqaName})؟ سيتم إنهاء تسجيله الحالي مع الاحتفاظ بكافة سجلاته التاريخية.`)) {
       return;
     }

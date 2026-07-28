@@ -239,13 +239,18 @@ export async function getTeacherSessionEditorData(input: {
     },
   });
 
+  const recordedStudentIds = (session?.items ?? []).map((item) => item.studentId);
+
   const enrollments = await prisma.studentEnrollment.findMany({
     where: {
       halaqaId: input.halaqaId,
       deletedAt: null,
       startedOn: { lte: date },
-      OR: [{ endedOn: null }, { endedOn: { gte: date } }],
-      student: { deletedAt: null },
+      student: { deletedAt: null, isActive: true },
+      OR: [
+        { status: "ACTIVE" },
+        ...(recordedStudentIds.length ? [{ studentId: { in: recordedStudentIds } }] : []),
+      ],
     },
     orderBy: [{ student: { displayName: "asc" } }, { startedOn: "asc" }],
     select: {

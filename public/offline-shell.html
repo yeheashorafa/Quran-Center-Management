@@ -260,6 +260,7 @@
         if (db.objectStoreNames.contains(STORE_PROFILE)) stores.push(STORE_PROFILE);
         if (db.objectStoreNames.contains("teacher_cache")) stores.push("teacher_cache");
         if (db.objectStoreNames.contains("examiner_cache")) stores.push("examiner_cache");
+        if (db.objectStoreNames.contains("manager_cache")) stores.push("manager_cache");
 
         if (stores.length === 0) {
           loadingEl.style.display = "none";
@@ -270,6 +271,7 @@
         const tx = db.transaction(stores, "readonly");
         let teacherName = null;
         let examinerName = null;
+        let hasManagerCache = false;
 
         if (stores.includes(STORE_PROFILE)) {
           const profileStore = tx.objectStore(STORE_PROFILE);
@@ -310,6 +312,16 @@
           };
         }
 
+        if (stores.includes("manager_cache")) {
+          const mStore = tx.objectStore("manager_cache");
+          const reqAllM = mStore.getAll();
+          reqAllM.onsuccess = function () {
+            if (reqAllM.result && reqAllM.result.length > 0) {
+              hasManagerCache = true;
+            }
+          };
+        }
+
         tx.oncomplete = function () {
           loadingEl.style.display = "none";
 
@@ -342,6 +354,22 @@
                 localStorage.setItem("offline_role", "EXAMINER");
               } catch (e) {}
               window.location.href = "/offline-examiner";
+            };
+            buttonsEl.appendChild(btn);
+          }
+
+          if (hasManagerCache) {
+            hasAccount = true;
+            const btn = document.createElement("button");
+            btn.className = "btn btn-online";
+            btn.style.backgroundColor = "#4f46e5";
+            btn.type = "button";
+            btn.innerHTML = "📊 عرض آخر نسخة محفوظة للمدير (قراءة فقط)";
+            btn.onclick = function () {
+              try {
+                localStorage.setItem("offline_role", "CENTER_MANAGER");
+              } catch (e) {}
+              window.location.href = "/offline-manager";
             };
             buttonsEl.appendChild(btn);
           }

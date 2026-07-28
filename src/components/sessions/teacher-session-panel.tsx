@@ -148,10 +148,11 @@ export function TeacherSessionPanel({
   }, [sessionDate]);
 
   const halaqaWeekdays = useMemo(() => {
-    return editor?.halaqa?.weekdays?.length
-      ? editor.halaqa.weekdays
-      : selectedHalaqa?.weekdays || [];
-  }, [editor, selectedHalaqa?.weekdays]);
+    if (editor && editor.date === sessionDate && editor.halaqa?.weekdays?.length) {
+      return editor.halaqa.weekdays;
+    }
+    return selectedHalaqa?.weekdays || [];
+  }, [editor, selectedHalaqa?.weekdays, sessionDate]);
 
   const scheduledWeekdaysText = useMemo(() => {
     if (!halaqaWeekdays.length) return "غير محددة";
@@ -159,7 +160,7 @@ export function TeacherSessionPanel({
   }, [halaqaWeekdays]);
 
   const dayNotAllowedReason = useMemo(() => {
-    if (editor && editor.allowed === false) {
+    if (editor && editor.date === sessionDate && editor.allowed === false) {
       return editor.reason;
     }
     if (!halaqaWeekdays || halaqaWeekdays.length === 0) {
@@ -169,7 +170,7 @@ export function TeacherSessionPanel({
       return `هذا اليوم ليس من أيام تحفيظ هذه الحلقة، ولا يمكنك تسجيل تسميع فيه.\nأيام الحلقة هي: ${scheduledWeekdaysText}.`;
     }
     return null;
-  }, [editor, halaqaWeekdays, currentWeekday, scheduledWeekdaysText]);
+  }, [editor, sessionDate, halaqaWeekdays, currentWeekday, scheduledWeekdaysText]);
 
   const isAllowedSessionDay = !dayNotAllowedReason;
 
@@ -210,7 +211,7 @@ export function TeacherSessionPanel({
                 id: halaqaId,
                 nameAr: selectedHalaqa?.nameAr || "الحلقة",
                 stageName: selectedHalaqa?.stageName || "",
-                weekdays: halaqaWeekdays,
+                weekdays: selectedHalaqa?.weekdays || [],
               },
               session: null,
               students: cache.students,
@@ -341,7 +342,8 @@ export function TeacherSessionPanel({
       });
 
     return () => controller.abort();
-  }, [halaqaId, sessionDate, dashboard, selectedHalaqa, currentWeekday, halaqaWeekdays, offlineOnly]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [halaqaId, sessionDate, offlineOnly]);
 
   // Auto-save draft locally whenever student recitation data is modified
   function handleStudentsUpdate(newStudents: SessionStudentValue[]) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getPendingSyncCount, processSyncQueue } from "@/lib/offline/sync-queue";
+import { checkServerConnection, getPendingSyncCount, processSyncQueue } from "@/lib/offline/sync-queue";
 
 export function NetworkStatusBar({
   onSyncCompleted,
@@ -10,8 +10,10 @@ export function NetworkStatusBar({
 }) {
   const [mounted, setMounted] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "synced" | "failed">("idle");
   const [pendingCount, setPendingCount] = useState<number>(0);
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
 
   const refreshPendingCount = useCallback(async () => {
     const count = await getPendingSyncCount();
@@ -21,11 +23,33 @@ export function NetworkStatusBar({
 
   const triggerSync = useCallback(async () => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
+
     setSyncStatus("syncing");
+    setAuthErrorMessage(null);
+
+    const check = await checkServerConnection();
+    if (!check.online) {
+      setIsOnline(false);
+      setSyncStatus("failed");
+      return;
+    }
+
+    if (!check.authenticated) {
+      setIsAuthenticated(false);
+      setSyncStatus("failed");
+      setAuthErrorMessage(check.message);
+      return;
+    }
+
+    setIsAuthenticated(true);
     const res = await processSyncQueue((status, count) => {
       setSyncStatus(status);
       setPendingCount(count);
     });
+
+    if (res.message) {
+      setAuthErrorMessage(res.message);
+    }
 
     if (res.success > 0 && onSyncCompleted) {
       onSyncCompleted();
@@ -67,7 +91,7 @@ export function NetworkStatusBar({
 
     const interval = setInterval(() => {
       void refreshPendingCount();
-    }, 4000);
+    }, 5000);
 
     return () => {
       active = false;
@@ -96,25 +120,27 @@ export function NetworkStatusBar({
   }
 
   return (
-    <aside
-      aria-label="حالة الاتصال والمزامنة"
-      className=""
-    >
+    <aside aria-label="حالة الاتصال والمزامنة" className="">
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-bold">
         {/* Status Indicator */}
         <div className="flex items-center gap-2">
           {!isOnline ? (
-            <div className="flex items-center gap-2  px-3 py-1.5 text-[var(--status-warning-text)]">
+            <div className="flex items-center gap-2 px-3 py-1.5 text-[var(--status-warning-text)]">
               <span className="size-2.5 rounded-full bg-[var(--gold)] animate-pulse" />
               <span> غير متصل — يتم حفظ التغييرات محلياً</span>
             </div>
+          ) : !isAuthenticated ? (
+            <div className="flex items-center gap-2 rounded-xl px-3 py-1.5 text-[var(--status-warning-text)]">
+              <span className="size-2.5 rounded-full bg-amber-500" />
+              <span> {authErrorMessage || "انتهت الجلسة — تحتاج تسجيل الدخول بالإنترنت للمزامنة"}</span>
+            </div>
           ) : syncStatus === "syncing" ? (
-            <div className="flex items-center gap-2 rounded-xl border  px-3 py-1.5 text-[var(--status-info-text)]">
+            <div className="flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[var(--status-info-text)]">
               <span className="size-2.5 rounded-full bg-blue-600 animate-spin" />
               <span> جاري مزامنة البيانات مع الخادم...</span>
             </div>
           ) : syncStatus === "failed" ? (
-            <div className="flex items-center gap-2 rounded-xl   px-3 py-1.5 text-[var(--status-danger-text)]">
+            <div className="flex items-center gap-2 rounded-xl px-3 py-1.5 text-[var(--status-danger-text)]">
               <span className="size-2.5 rounded-full bg-red-600" />
               <span> تعذر مزامنة بعض البيانات</span>
             </div>
@@ -137,8 +163,15 @@ export function NetworkStatusBar({
           ) : null}
         </div>
 
-        {/* Sync Now Button */}
-        {pendingCount > 0 || !isOnline || syncStatus === "failed" ? (
+        {/* Sync or Re-login Action Button */}
+        {isOnline && !isAuthenticated ? (
+          <a
+            href="/login"
+            className="rounded-xl bg-amber-600 px-4 py-1.5 text-xs font-black text-white shadow-xs transition hover:bg-amber-700"
+          >
+            🔐 تسجيل الدخول ومزامنة البيانات
+          </a>
+        ) : pendingCount > 0 || !isOnline || syncStatus === "failed" ? (
           <button
             type="button"
             disabled={!isOnline || syncStatus === "syncing"}

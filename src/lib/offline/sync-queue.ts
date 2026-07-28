@@ -82,15 +82,80 @@ export async function getPendingSyncCount(): Promise<number> {
   return items.filter((item) => item.status === "pending" || item.status === "failed" || item.status === "conflict").length;
 }
 
+export type NetworkCheckResult =
+  | { online: true; authenticated: true; user?: unknown }
+  | { online: true; authenticated: false; message: string }
+  | { online: false; authenticated: false; message: string };
+
+export async function checkServerConnection(): Promise<NetworkCheckResult> {
+  try {
+    const res = await fetch("/api/auth/me", {
+      method: "GET",
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" },
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { online: true, authenticated: true, user: data.user };
+    }
+    if (res.status === 401 || res.status === 403) {
+      return {
+        online: true,
+        authenticated: false,
+        message: "تحتاج تسجيل الدخول بالإنترنت مرة واحدة قبل المزامنة.",
+      };
+    }
+    return {
+      online: true,
+      authenticated: false,
+      message: `خطأ في الاتصال بالخادم (${res.status}).`,
+    };
+  } catch {
+    return {
+      online: false,
+      authenticated: false,
+      message: "لا يوجد اتصال فعلي بالسيرفر.",
+    };
+  }
+}
+
+export async function deleteSyncItem(queueId: string): Promise<void> {
+  await idbDelete(STORES.SYNC_QUEUE, queueId);
+}
+
+export async function clearFailedSyncItems(): Promise<void> {
+  const items = await getAllSyncItems();
+  for (const item of items) {
+    if (item.status === "failed" || item.status === "conflict") {
+      await idbDelete(STORES.SYNC_QUEUE, item.queueId);
+    }
+  }
+}
+
+export async function clearAllSyncItems(): Promise<void> {
+  const items = await getAllSyncItems();
+  for (const item of items) {
+    await idbDelete(STORES.SYNC_QUEUE, item.queueId);
+  }
+}
+
 let isSyncing = false;
 
 export async function processSyncQueue(
   onStatusChange?: (status: "syncing" | "synced" | "failed" | "idle", pendingCount: number) => void,
-): Promise<{ success: number; failed: number }> {
-  if (isSyncing || typeof navigator === "undefined" || !navigator.onLine) {
+): Promise<{ success: number; failed: number; message?: string }> {
+  if (isSyncing) {
     const pending = await getPendingSyncCount();
     onStatusChange?.("idle", pending);
     return { success: 0, failed: 0 };
+  }
+
+  // Perform real server connection check before syncing
+  const check = await checkServerConnection();
+  if (!check.online || !check.authenticated) {
+    const pending = await getPendingSyncCount();
+    onStatusChange?.("failed", pending);
+    return { success: 0, failed: 0, message: check.message };
   }
 
   isSyncing = true;
@@ -110,7 +175,7 @@ export async function processSyncQueue(
   let failedCount = 0;
 
   for (const item of pendingItems) {
-    if (!navigator.onLine) break;
+    if (typeof navigator !== "undefined" && !navigator.onLine) break;
 
     item.status = "syncing";
     item.updatedAt = Date.now();

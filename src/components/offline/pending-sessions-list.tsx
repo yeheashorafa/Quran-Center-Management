@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { processSyncQueue, type SyncQueueItem } from "@/lib/offline/sync-queue";
+import {
+  clearAllSyncItems,
+  clearFailedSyncItems,
+  deleteSyncItem,
+  processSyncQueue,
+  type SyncQueueItem,
+} from "@/lib/offline/sync-queue";
 
 export function PendingSessionsList({
   items,
@@ -13,14 +19,19 @@ export function PendingSessionsList({
   const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
 
   useEffect(() => {
     let active = true;
     queueMicrotask(() => {
       if (active) setIsOffline(typeof navigator !== "undefined" && !navigator.onLine);
     });
-    function handleOnline() { if (active) setIsOffline(false); }
-    function handleOffline() { if (active) setIsOffline(true); }
+    function handleOnline() {
+      if (active) setIsOffline(false);
+    }
+    function handleOffline() {
+      if (active) setIsOffline(true);
+    }
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     return () => {
@@ -43,7 +54,9 @@ export function PendingSessionsList({
     setSyncing(false);
     onRefresh?.();
 
-    if (res.success > 0) {
+    if (res.message) {
+      setNotice(`⚠️ ${res.message}`);
+    } else if (res.success > 0) {
       setNotice(`✅ تم بنجاح مزامنة ${res.success} عملية مع الخادم.`);
     } else if (res.failed > 0) {
       setNotice(`⚠️ تعذر مزامنة ${res.failed} عملية. راجع أسباب الفشل أدناه.`);
@@ -52,31 +65,103 @@ export function PendingSessionsList({
     }
   }, [onRefresh]);
 
+  async function handleDeleteSingle(queueId: string) {
+    if (confirm("هل أنت متأكد من حذف هذه العملية المعلقة؟ لن يتم رفع بياناتها للسيرفر.")) {
+      await deleteSyncItem(queueId);
+      onRefresh?.();
+    }
+  }
+
+  async function handleClearFailed() {
+    await clearFailedSyncItems();
+    setShowClearModal(false);
+    onRefresh?.();
+  }
+
+  async function handleClearAll() {
+    await clearAllSyncItems();
+    setShowClearModal(false);
+    onRefresh?.();
+  }
+
   if (items.length === 0) {
     return null;
   }
 
   return (
-    <section className="rounded-3xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-5 shadow-sm space-y-4" dir="rtl">
+    <section
+      className="rounded-3xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-5 shadow-sm space-y-4"
+      dir="rtl"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--status-warning-border)] pb-3">
         <div>
           <h3 className="text-base font-black text-[var(--status-warning-text)] flex items-center gap-2">
-            <span>⏳ جلسات بانتظار المزامنة ({items.length})</span>
+            <span>⏳ عمليات بانتظار المزامنة ({items.length})</span>
           </h3>
           <p className="mt-0.5 text-xs font-bold text-[var(--text-muted)]">
             تم حفظ هذه الجلسات والعمليات محلياً على هذا الجهاز لعدم وجود إنترنت.
           </p>
         </div>
 
-        <button
-          type="button"
-          disabled={syncing || isOffline}
-          onClick={() => void handleManualSync()}
-          className="rounded-2xl bg-[var(--primary)] px-5 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[var(--primary-dark)] disabled:opacity-50"
-        >
-          {syncing ? "جاري المزامنة..." : "🔄 مزامنة الآن"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={syncing || isOffline}
+            onClick={() => void handleManualSync()}
+            className="rounded-2xl bg-[var(--primary)] px-5 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[var(--primary-dark)] disabled:opacity-50"
+          >
+            {syncing ? "جاري المزامنة..." : "🔄 مزامنة الآن"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowClearModal(true)}
+            className="rounded-2xl border border-[var(--status-danger-border)] bg-[var(--card-bg)] px-4 py-2 text-xs font-black text-[var(--status-danger-text)] transition hover:bg-[var(--status-danger-bg)]"
+          >
+            🗑️ مسح العمليات المعلقة
+          </button>
+        </div>
       </div>
+
+      {/* Confirmation Modal for Clearing Pending Operations */}
+      {showClearModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" dir="rtl">
+          <div className="w-full max-w-md rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl space-y-4 text-[var(--text-main)]">
+            <div className="flex items-center gap-3 text-[var(--status-danger-text)]">
+              <span className="text-3xl">⚠️</span>
+              <h3 className="text-lg font-black">تحذير: مسح العمليات المعلقة</h3>
+            </div>
+
+            <p className="text-xs font-bold leading-relaxed text-[var(--text-muted)]">
+              هذه العمليات لم تتم مزامنتها بعد. إذا حذفتها ستفقد البيانات المحفوظة محلياً ولن يتم رفعها للسيرفر. هل أنت متأكد؟
+            </p>
+
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => void handleClearFailed()}
+                className="w-full rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs font-black text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
+              >
+                مسح العمليات الفاشلة فقط (Failed / Conflict)
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleClearAll()}
+                className="w-full rounded-2xl bg-red-600 px-4 py-2.5 text-xs font-black text-white shadow-md hover:bg-red-700"
+              >
+                نعم، مسح جميع العمليات المعلقة
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                className="w-full rounded-2xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 py-2 text-xs font-black text-[var(--text-main)]"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {notice ? (
         <div className="rounded-2xl bg-[var(--card-bg)] p-3 text-xs font-black text-[var(--text-main)] border border-[var(--border-color)]">
@@ -87,10 +172,15 @@ export function PendingSessionsList({
       <div className="space-y-3">
         {items.map((item) => {
           const studentCount =
-          "items" in item.payload && Array.isArray(item.payload.items)
-            ? item.payload.items.length
-            : 1;
-          const opLabel = item.type === "save_session" ? "اعتماد جلسة كاملة" : "حفظ طالب";
+            "items" in item.payload && Array.isArray(item.payload.items)
+              ? item.payload.items.length
+              : 1;
+          const opLabel =
+            item.type === "save_session"
+              ? "اعتماد جلسة كاملة"
+              : item.type === "save_official_exam"
+                ? "تسجيل اختبار رسمي"
+                : "حفظ طالب";
           const formattedDate = new Date(item.createdAt).toLocaleTimeString("ar-EG", {
             hour: "2-digit",
             minute: "2-digit",
@@ -104,15 +194,19 @@ export function PendingSessionsList({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-3">
                   <span className="flex size-9 items-center justify-center rounded-xl bg-[var(--card-soft)] text-sm font-black text-[var(--primary)]">
-                    {item.type === "save_session" ? "📋" : "👤"}
+                    {item.type === "save_session"
+                      ? "📋"
+                      : item.type === "save_official_exam"
+                        ? "📝"
+                        : "👤"}
                   </span>
                   <div>
                     <h4 className="text-sm font-black text-[var(--text-main)]">
-                      جلسة تاريخ: <span className="text-[var(--primary)]">{item.sessionDate}</span>
+                      التاريخ: <span className="text-[var(--primary)]">{item.sessionDate || (item.payload as { examDate?: string }).examDate}</span>
                     </h4>
                     <p className="text-xs font-bold text-[var(--text-muted)]">
                       نوع العملية: <span className="text-[var(--text-main)]">{opLabel}</span> | عدد الطلاب:{" "}
-                      <span className="text-[var(--text-main)]">{studentCount} طالب</span> | الوصل: {formattedDate}
+                      <span className="text-[var(--text-main)]">{studentCount} طالب</span> | الوقت: {formattedDate}
                     </p>
                   </div>
                 </div>
@@ -139,6 +233,15 @@ export function PendingSessionsList({
                       ✅ تمت المزامنة
                     </span>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteSingle(item.queueId)}
+                    title="حذف هذه العملية"
+                    className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] p-1.5 text-xs text-[var(--status-danger-text)] hover:bg-[var(--status-danger-bg)]"
+                  >
+                    🗑️
+                  </button>
                 </div>
               </div>
 
@@ -155,3 +258,4 @@ export function PendingSessionsList({
     </section>
   );
 }
+

@@ -321,18 +321,53 @@ export function TeacherStudentsPanel({
             <form onSubmit={(e) => void handleAddStudent(e)} className="space-y-4">
               <div>
                 <label className="form-label">الاسم الكامل للطالب *</label>
-                <input type="text" name="fullName" required placeholder="مثال: عبد الرحمن محمد الشرفا" className="form-control font-bold" />
+                <input
+                  type="text"
+                  name="fullName"
+                  required
+                  placeholder="مثال: عبد الرحمن محمد الشرفا"
+                  className="form-control font-bold"
+                  pattern="^[\u0600-\u06FF\s]+$"
+                  title="اكتب الاسم باللغة العربية فقط."
+                />
+                <p className="mt-1 text-[11px] font-bold text-[var(--text-muted)]">
+                  اكتب الاسم باللغة العربية فقط، مثال: عبد الرحمن محمد الشرفا
+                </p>
               </div>
 
               <div>
                 <label className="form-label">اسم الشهرة / العرض *</label>
-                <input type="text" name="displayName" required placeholder="مثال: عبد الرحمن الشرفا" className="form-control font-bold" />
+                <input
+                  type="text"
+                  name="displayName"
+                  required
+                  placeholder="مثال: عبد الرحمن الشرفا"
+                  className="form-control font-bold"
+                  pattern="^[\u0600-\u06FF\s]+$"
+                  title="اكتب الاسم المختصر باللغة العربية فقط."
+                />
+                <p className="mt-1 text-[11px] font-bold text-[var(--text-muted)]">
+                  اكتب الاسم المختصر باللغة العربية فقط الذي سيظهر في القوائم.
+                </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="form-label">رقم هاتف ولي الأمر</label>
-                  <input type="text" name="parentPhone" placeholder="059xxxxxxx" className="form-control font-bold" />
+                  <input
+                    type="text"
+                    name="parentPhone"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="059xxxxxxx"
+                    className="form-control font-bold"
+                    onChange={(e) => {
+                      e.target.value = e.target.value.replace(/\D/g, "");
+                    }}
+                  />
+                  <p className="mt-1 text-[11px] font-bold text-[var(--text-muted)]">
+                    رقم الهاتف يجب أن يحتوي على أرقام فقط.
+                  </p>
                 </div>
                 <div>
                   <label className="form-label">الصف الدراسي</label>
@@ -384,18 +419,53 @@ export function TeacherStudentsPanel({
             <form onSubmit={(e) => void handleEditStudent(e)} className="space-y-4">
               <div>
                 <label className="form-label">الاسم الكامل *</label>
-                <input type="text" name="fullName" defaultValue={editingStudent.fullName} required className="form-control font-bold" />
+                <input
+                  type="text"
+                  name="fullName"
+                  defaultValue={editingStudent.fullName}
+                  required
+                  className="form-control font-bold"
+                  pattern="^[\u0600-\u06FF\s]+$"
+                  title="اكتب الاسم باللغة العربية فقط."
+                />
+                <p className="mt-1 text-[11px] font-bold text-[var(--text-muted)]">
+                  اكتب الاسم باللغة العربية فقط، مثال: عبد الرحمن محمد الشرفا
+                </p>
               </div>
 
               <div>
                 <label className="form-label">اسم الشهرة / العرض *</label>
-                <input type="text" name="displayName" defaultValue={editingStudent.displayName} required className="form-control font-bold" />
+                <input
+                  type="text"
+                  name="displayName"
+                  defaultValue={editingStudent.displayName}
+                  required
+                  className="form-control font-bold"
+                  pattern="^[\u0600-\u06FF\s]+$"
+                  title="اكتب الاسم المختصر باللغة العربية فقط."
+                />
+                <p className="mt-1 text-[11px] font-bold text-[var(--text-muted)]">
+                  اكتب الاسم المختصر باللغة العربية فقط الذي سيظهر في القوائم.
+                </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="form-label">رقم هاتف ولي الأمر</label>
-                  <input type="text" name="parentPhone" defaultValue={editingStudent.parentPhone || ""} className="form-control font-bold" />
+                  <input
+                    type="text"
+                    name="parentPhone"
+                    defaultValue={editingStudent.parentPhone || ""}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    className="form-control font-bold"
+                    onChange={(e) => {
+                      e.target.value = e.target.value.replace(/\D/g, "");
+                    }}
+                  />
+                  <p className="mt-1 text-[11px] font-bold text-[var(--text-muted)]">
+                    رقم الهاتف يجب أن يحتوي على أرقام فقط.
+                  </p>
                 </div>
                 <div>
                   <label className="form-label">الصف الدراسي</label>
