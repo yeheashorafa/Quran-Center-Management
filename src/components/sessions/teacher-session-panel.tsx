@@ -36,6 +36,7 @@ import { PendingSessionsList } from "@/components/offline/pending-sessions-list"
 import { TeacherExamsPanel } from "@/components/teacher/teacher-exams-panel";
 import type { OfficialExamListItem } from "@/lib/official-exams/types";
 import { WEEKDAY_LABELS } from "@/lib/halaqat/weekdays";
+import { weekdayFromDateOnly } from "@/lib/memorization-sessions/date";
 import type {
   SessionActivityCode,
   SessionAttendanceCode,
@@ -62,11 +63,13 @@ export function TeacherSessionPanel({
   initialHalaqaId,
   initialDate,
   officialExams = [],
+  offlineOnly = false,
 }: {
   dashboard: TeacherSessionDashboardData;
   initialHalaqaId: string;
   initialDate: string;
   officialExams?: OfficialExamListItem[];
+  offlineOnly?: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<
     | "recitation"
@@ -91,8 +94,8 @@ export function TeacherSessionPanel({
   );
 
   // Offline status & cache metadata
-  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
-  const [isClientOffline, setIsClientOffline] = useState<boolean>(false);
+  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(offlineOnly);
+  const [isClientOffline, setIsClientOffline] = useState<boolean>(offlineOnly);
   const [lastCacheTime, setLastCacheTime] = useState<string | null>(null);
 
   useEffect(() => {
@@ -100,12 +103,12 @@ export function TeacherSessionPanel({
     queueMicrotask(() => {
       if (active) {
         setIsClientOffline(
-          typeof navigator !== "undefined" && !navigator.onLine,
+          offlineOnly || (typeof navigator !== "undefined" && !navigator.onLine),
         );
       }
     });
     function handleOnline() {
-      if (active) setIsClientOffline(false);
+      if (active && !offlineOnly) setIsClientOffline(false);
     }
     function handleOffline() {
       if (active) setIsClientOffline(true);
@@ -117,7 +120,7 @@ export function TeacherSessionPanel({
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, []);
+  }, [offlineOnly]);
 
   // Local Draft & Queue state
   const [pendingDraft, setPendingDraft] = useState<SessionDraftRecord | null>(
@@ -136,13 +139,39 @@ export function TeacherSessionPanel({
     [dashboard.halaqat, halaqaId],
   );
 
-  const isAllowedSessionDay = isOfflineMode || (editor ? editor.allowed : true);
+  const currentWeekday = useMemo(() => {
+    try {
+      return weekdayFromDateOnly(sessionDate);
+    } catch {
+      return null;
+    }
+  }, [sessionDate]);
+
+  const halaqaWeekdays = useMemo(() => {
+    return editor?.halaqa?.weekdays?.length
+      ? editor.halaqa.weekdays
+      : selectedHalaqa?.weekdays || [];
+  }, [editor, selectedHalaqa?.weekdays]);
 
   const scheduledWeekdaysText = useMemo(() => {
-    const weekdays = editor?.halaqa?.weekdays || selectedHalaqa?.weekdays || [];
-    if (!weekdays.length) return "غير محددة";
-    return weekdays.map((w) => WEEKDAY_LABELS[w]).join("، ");
-  }, [editor?.halaqa?.weekdays, selectedHalaqa?.weekdays]);
+    if (!halaqaWeekdays.length) return "غير محددة";
+    return halaqaWeekdays.map((w) => WEEKDAY_LABELS[w]).join("، ");
+  }, [halaqaWeekdays]);
+
+  const dayNotAllowedReason = useMemo(() => {
+    if (editor && editor.allowed === false) {
+      return editor.reason;
+    }
+    if (!halaqaWeekdays || halaqaWeekdays.length === 0) {
+      return "لا يمكن التحقق من أيام الحلقة أوفلاين. افتح اللوحة بالإنترنت مرة واحدة لتحديث البيانات.";
+    }
+    if (currentWeekday && !halaqaWeekdays.includes(currentWeekday)) {
+      return `هذا اليوم ليس من أيام تحفيظ هذه الحلقة، ولا يمكنك تسجيل تسميع فيه.\nأيام الحلقة هي: ${scheduledWeekdaysText}.`;
+    }
+    return null;
+  }, [editor, halaqaWeekdays, currentWeekday, scheduledWeekdaysText]);
+
+  const isAllowedSessionDay = !dayNotAllowedReason;
 
   useEffect(() => {
     if (!halaqaId || !sessionDate) return;
@@ -163,7 +192,7 @@ export function TeacherSessionPanel({
 
     void getAllSyncItems().then(setOfflineSyncItems);
 
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
+    if (offlineOnly || (typeof navigator !== "undefined" && !navigator.onLine)) {
       queueMicrotask(() => {
         setIsOfflineMode(true);
       });
@@ -175,9 +204,14 @@ export function TeacherSessionPanel({
               allowed: true,
               reason: null,
               date: sessionDate,
-              weekday: "SATURDAY",
-              weekdayLabel: "السبت",
-              halaqa: { id: halaqaId, nameAr: "الحلقة", stageName: "المرحلة", weekdays: [] },
+              weekday: currentWeekday || "SATURDAY",
+              weekdayLabel: currentWeekday ? WEEKDAY_LABELS[currentWeekday] : "السبت",
+              halaqa: {
+                id: halaqaId,
+                nameAr: selectedHalaqa?.nameAr || "الحلقة",
+                stageName: selectedHalaqa?.stageName || "",
+                weekdays: halaqaWeekdays,
+              },
               session: null,
               students: cache.students,
             },
@@ -307,7 +341,7 @@ export function TeacherSessionPanel({
       });
 
     return () => controller.abort();
-  }, [halaqaId, sessionDate, dashboard, selectedHalaqa]);
+  }, [halaqaId, sessionDate, dashboard, selectedHalaqa, currentWeekday, halaqaWeekdays, offlineOnly]);
 
   // Auto-save draft locally whenever student recitation data is modified
   function handleStudentsUpdate(newStudents: SessionStudentValue[]) {
@@ -1129,6 +1163,7 @@ export function TeacherSessionPanel({
       {activeTab === "students" ? (
         <TeacherStudentsPanel
           halaqaId={halaqaId}
+          isOffline={offlineOnly || isOfflineMode || isClientOffline}
           students={students.map((s) => ({
             studentId: s.studentId,
             fullName: s.fullName,
@@ -1139,7 +1174,11 @@ export function TeacherSessionPanel({
             stageName: selectedHalaqa?.stageName || "",
             memorizationStartedOn: null,
           }))}
-          onRefresh={() => window.location.reload()}
+          onRefresh={() => {
+            if (!offlineOnly && typeof navigator !== "undefined" && navigator.onLine) {
+              window.location.reload();
+            }
+          }}
         />
       ) : null}
 

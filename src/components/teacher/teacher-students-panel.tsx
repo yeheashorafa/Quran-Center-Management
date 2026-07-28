@@ -21,10 +21,12 @@ export function TeacherStudentsPanel({
   halaqaId,
   students,
   onRefresh,
+  isOffline = false,
 }: {
   halaqaId: string;
   students: TeacherStudentItem[];
   onRefresh: () => void;
+  isOffline?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -43,6 +45,12 @@ export function TeacherStudentsPanel({
 
   async function handleAddStudent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      setNotice({ type: "error", text: "إضافة الطلاب تحتاج اتصالاً بالإنترنت." });
+      return;
+    }
+
     setBusy(true);
     setNotice(null);
 
@@ -79,6 +87,12 @@ export function TeacherStudentsPanel({
   async function handleEditStudent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingStudent) return;
+
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      setNotice({ type: "error", text: "تعديل بيانات الطلاب يحتاج اتصالاً بالإنترنت." });
+      return;
+    }
+
     setBusy(true);
     setNotice(null);
 
@@ -115,8 +129,8 @@ export function TeacherStudentsPanel({
   }
 
   async function handleRemoveFromHalaqa(studentId: string, displayName: string) {
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      setNotice({ type: "error", text: "إزالة الطالب تحتاج اتصالاً بالإنترنت." });
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      setNotice({ type: "error", text: "إزالة الطالب من الحلقة تحتاج اتصالاً بالإنترنت." });
       return;
     }
 
@@ -146,39 +160,12 @@ export function TeacherStudentsPanel({
     }
   }
 
-  async function handleDeleteTestStudent(studentId: string, displayName: string) {
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      setNotice({ type: "error", text: "حذف الطالب يحتاج اتصالاً بالإنترنت." });
-      return;
-    }
-
-    if (!confirm(`هل أنت متأكد من حذف الطالب التجريبي (${displayName}) نهائياً؟ هذا المطبّق يعمل فقط للطلاب الذين ليس لديهم سجلات تسميع أو اختبارات.`)) {
-      return;
-    }
-
-    setBusy(true);
-    setNotice(null);
-
-    try {
-      const response = await fetch(
-        `/api/teacher/students?studentId=${studentId}&halaqaId=${halaqaId}&action=delete`,
-        { method: "DELETE" },
-      );
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(json.message || "تعذر حذف الطالب.");
-      }
-
-      setNotice({ type: "success", text: json.message || "تم حذف الطالب التجريبي بنجاح." });
-      onRefresh();
-    } catch (err) {
-      setNotice({ type: "error", text: err instanceof Error ? err.message : "حدث خطأ أثناء الحذف." });
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function openReport(studentId: string) {
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      setNotice({ type: "error", text: "استخراج تقرير ولي الأمر يحتاج اتصالاً بالإنترنت." });
+      return;
+    }
+
     setFetchingReportId(studentId);
     try {
       const response = await fetch(`/api/reports/parent?studentId=${studentId}`);
@@ -190,6 +177,14 @@ export function TeacherStudentsPanel({
     } finally {
       setFetchingReportId(null);
     }
+  }
+
+  function handleOpenAddModal() {
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      setNotice({ type: "error", text: "إضافة الطلاب تحتاج اتصالاً بالإنترنت." });
+      return;
+    }
+    setShowAddModal(true);
   }
 
   return (
@@ -206,7 +201,7 @@ export function TeacherStudentsPanel({
           </div>
           <button
             type="button"
-            onClick={() => setShowAddModal(true)}
+            onClick={handleOpenAddModal}
             className="min-h-12 rounded-2xl bg-[var(--primary)] px-5 text-sm font-black text-white shadow-md transition hover:bg-[var(--primary-dark)]"
           >
             ➕ إضافة طالب جديد للحلقة
@@ -248,71 +243,61 @@ export function TeacherStudentsPanel({
                     <h3 className="text-base font-black text-[var(--text-main)]">{student.displayName}</h3>
                     <p className="text-xs font-bold text-[var(--text-muted)] mt-0.5">{student.fullName}</p>
                   </div>
-                  <span className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-2.5 py-1 text-[10px] font-black text-[var(--primary)]">
+                  <span className="rounded-xl bg-[var(--card-soft)] border border-[var(--border-color)] px-2.5 py-1 text-[11px] font-black text-[var(--primary)] shrink-0">
                     {student.stageName}
                   </span>
                 </div>
 
                 <div className="mt-4 space-y-1.5 text-xs text-[var(--text-muted)] font-bold">
-                  <div className="flex justify-between">
-                    <span>الصف الدراسي:</span>
-                    <span className="text-[var(--text-main)]">{student.gradeLevel || "غير مسجل"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>هاتف ولي الأمر:</span>
-                    <span className="text-[var(--text-main)]" dir="ltr">{student.parentPhone || "غير مسجل"}</span>
-                  </div>
-                  {student.notes ? (
-                    <div className="mt-2 rounded-xl bg-[var(--card-soft)] p-2 text-[11px] font-normal leading-5 text-[var(--text-muted)]">
-                      📝 {student.notes}
-                    </div>
+                  {student.parentPhone ? (
+                    <p>📱 ولي الأمر: <span className="font-black text-[var(--text-main)]" dir="ltr">{student.parentPhone}</span></p>
+                  ) : null}
+                  {student.gradeLevel ? (
+                    <p>🎓 الصف الدراسي: <span className="font-black text-[var(--text-main)]">{student.gradeLevel}</span></p>
+                  ) : null}
+                  {student.memorizationStartedOn ? (
+                    <p>📅 بداية التحفيظ: <span className="font-black text-[var(--text-main)]">{student.memorizationStartedOn}</span></p>
                   ) : null}
                 </div>
               </div>
 
-              <div className="mt-5 border-t border-[var(--border-color)] pt-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingStudent(student)}
-                    className="flex-1 min-h-10 rounded-xl bg-[var(--card-soft)] text-[var(--text-main)] font-bold text-xs border border-[var(--border-color)] px-3 hover:border-[var(--primary)] transition"
-                  >
-                    ✏️ تعديل
-                  </button>
-                  <button
-                    type="button"
-                    disabled={fetchingReportId === student.studentId}
-                    onClick={() => openReport(student.studentId)}
-                    className="flex-1 min-h-10 rounded-xl bg-[var(--card-soft)] text-[var(--primary)] font-black text-xs border border-[var(--border-color)] transition hover:bg-[var(--primary)] hover:text-white disabled:opacity-50"
-                  >
-                    {fetchingReportId === student.studentId ? "جاري..." : "📜 تقرير ولي الأمر"}
-                  </button>
-                </div>
+              <div className="mt-5 flex flex-wrap items-center gap-2 pt-3 border-t border-[var(--border-color)]">
+                <button
+                  type="button"
+                  onClick={() => void openReport(student.studentId)}
+                  disabled={fetchingReportId === student.studentId}
+                  className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-3 py-1.5 text-xs font-black text-[var(--primary)] hover:bg-[var(--card-bg)] disabled:opacity-50"
+                >
+                  {fetchingReportId === student.studentId ? "جاري التحميل..." : "📄 تقرير ولي الأمر"}
+                </button>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => handleRemoveFromHalaqa(student.studentId, student.displayName)}
-                    className="flex-1 min-h-9 rounded-xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] font-extrabold text-[11px] hover:opacity-90 transition disabled:opacity-50"
-                  >
-                    🚫 إزالة من الحلقة
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => handleDeleteTestStudent(student.studentId, student.displayName)}
-                    className="min-h-9 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] font-extrabold text-[11px] px-3 hover:opacity-90 transition disabled:opacity-50"
-                    title="حذف طالب تجريبي لا يحتوي على أي سجلات"
-                  >
-                    🗑️ حذف تجريبي
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+                      setNotice({ type: "error", text: "تعديل بيانات الطلاب يحتاج اتصالاً بالإنترنت." });
+                      return;
+                    }
+                    setEditingStudent(student);
+                  }}
+                  className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-3 py-1.5 text-xs font-black text-[var(--text-main)] hover:bg-[var(--card-bg)]"
+                >
+                  ✏️ تعديل
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void handleRemoveFromHalaqa(student.studentId, student.displayName)}
+                  disabled={busy}
+                  className="rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 py-1.5 text-xs font-black text-[var(--status-danger-text)] hover:opacity-80 disabled:opacity-50"
+                >
+                  إزالة من الحلقة
+                </button>
               </div>
             </article>
           ))
         ) : (
-          <div className="col-span-full rounded-3xl border border-dashed border-[var(--border-color)] bg-[var(--card-bg)] p-8 text-center text-sm font-bold text-[var(--text-muted)]">
+          <div className="sm:col-span-2 lg:col-span-3 rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-8 text-center text-xs font-bold text-[var(--text-muted)]">
             لا يوجد طلاب مطبقين للبحث.
           </div>
         )}
@@ -320,50 +305,60 @@ export function TeacherStudentsPanel({
 
       {/* Add Student Modal */}
       {showAddModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)]">
-            <h3 className="text-lg font-black text-[var(--text-main)]">إضافة طالب جديد للحلقة</h3>
-            <p className="mt-1 text-xs font-bold text-[var(--text-muted)]">
-              سينضاف الطالب مباشرة وحصرياً لحلقتك الحالية.
-            </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" dir="rtl">
+          <div className="w-full max-w-lg rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl space-y-4 text-[var(--text-main)]">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <h3 className="text-lg font-black text-[var(--text-main)]">➕ إضافة طالب جديد للحلقة</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="rounded-xl bg-[var(--card-soft)] p-2 text-xs font-black text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              >
+                ✕
+              </button>
+            </div>
 
-            <form className="mt-5 space-y-4" onSubmit={handleAddStudent}>
+            <form onSubmit={(e) => void handleAddStudent(e)} className="space-y-4">
               <div>
-                <label className="form-label">الاسم الكامل للطالب</label>
-                <input name="fullName" required placeholder="مثال: عبد الله أحمد محمود" className="form-control font-bold" />
+                <label className="form-label">الاسم الكامل للطالب *</label>
+                <input type="text" name="fullName" required placeholder="مثال: عبد الرحمن محمد الشرفا" className="form-control font-bold" />
               </div>
+
               <div>
-                <label className="form-label">اسم العرض (المختصر)</label>
-                <input name="displayName" required placeholder="مثال: عبد الله أحمد" className="form-control font-bold" />
+                <label className="form-label">اسم الشهرة / العرض *</label>
+                <input type="text" name="displayName" required placeholder="مثال: عبد الرحمن الشرفا" className="form-control font-bold" />
               </div>
-              <div>
-                <label className="form-label">رقم هاتف ولي الأمر</label>
-                <input name="parentPhone" placeholder="0599000000" className="form-control font-bold" dir="ltr" />
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="form-label">رقم هاتف ولي الأمر</label>
+                  <input type="text" name="parentPhone" placeholder="059xxxxxxx" className="form-control font-bold" />
+                </div>
+                <div>
+                  <label className="form-label">الصف الدراسي</label>
+                  <input type="text" name="gradeLevel" placeholder="مثال: الصف الخامس" className="form-control font-bold" />
+                </div>
               </div>
+
               <div>
-                <label className="form-label">الصف الدراسي</label>
-                <input name="gradeLevel" placeholder="مثال: الصف السادس" className="form-control font-bold" />
-              </div>
-              <div>
-                <label className="form-label">تاريخ بداية الحفظ</label>
+                <label className="form-label">تاريخ بدء التحفيظ</label>
                 <input type="date" name="memorizationStartedOn" className="form-control font-bold" />
               </div>
 
-              <div className="mt-6 flex items-center justify-end gap-3 border-t border-[var(--border-color)] pt-4">
+              <div className="flex justify-end gap-3 pt-3 border-t border-[var(--border-color)]">
                 <button
                   type="button"
-                  disabled={busy}
                   onClick={() => setShowAddModal(false)}
-                  className="min-h-11 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-xs font-bold text-[var(--text-main)] hover:border-[var(--primary)]"
+                  className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-soft)] px-5 py-2.5 text-xs font-black text-[var(--text-main)]"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={busy}
-                  className="min-h-11 rounded-xl bg-[var(--primary)] px-5 text-xs font-black text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+                  className="rounded-2xl bg-[var(--primary)] px-6 py-2.5 text-xs font-black text-white shadow-md hover:bg-[var(--primary-dark)] disabled:opacity-50"
                 >
-                  {busy ? "جاري الإضافة..." : "حفظ وإضافة الطالب"}
+                  {busy ? "جاري الإضافة..." : "حفظ إضافة الطالب"}
                 </button>
               </div>
             </form>
@@ -373,94 +368,63 @@ export function TeacherStudentsPanel({
 
       {/* Edit Student Modal */}
       {editingStudent ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl text-[var(--text-main)]">
-            <h3 className="text-lg font-black text-[var(--text-main)]">تعديل بيانات الطالب</h3>
-            <p className="mt-1 text-xs font-bold text-[var(--text-muted)]">
-              تعديل البيانات الأساسية للطالب في الحلقة.
-            </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" dir="rtl">
+          <div className="w-full max-w-lg rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl space-y-4 text-[var(--text-main)]">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <h3 className="text-lg font-black text-[var(--text-main)]">✏️ تعديل بيانات الطالب</h3>
+              <button
+                type="button"
+                onClick={() => setEditingStudent(null)}
+                className="rounded-xl bg-[var(--card-soft)] p-2 text-xs font-black text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              >
+                ✕
+              </button>
+            </div>
 
-            <form className="mt-5 space-y-4" onSubmit={handleEditStudent}>
+            <form onSubmit={(e) => void handleEditStudent(e)} className="space-y-4">
               <div>
-                <label className="form-label">الاسم الكامل للطالب</label>
-                <input
-                  name="fullName"
-                  required
-                  defaultValue={editingStudent.fullName}
-                  className="form-control font-bold"
-                />
-              </div>
-              <div>
-                <label className="form-label">اسم العرض (المختصر)</label>
-                <input
-                  name="displayName"
-                  required
-                  defaultValue={editingStudent.displayName}
-                  className="form-control font-bold"
-                />
-              </div>
-              <div>
-                <label className="form-label">رقم هاتف ولي الأمر</label>
-                <input
-                  name="parentPhone"
-                  defaultValue={editingStudent.parentPhone || ""}
-                  placeholder="0599000000"
-                  className="form-control font-bold"
-                  dir="ltr"
-                />
-              </div>
-              <div>
-                <label className="form-label">الصف الدراسي</label>
-                <input
-                  name="gradeLevel"
-                  defaultValue={editingStudent.gradeLevel || ""}
-                  placeholder="مثال: الصف السادس"
-                  className="form-control font-bold"
-                />
-              </div>
-              <div>
-                <label className="form-label">تاريخ بداية الحفظ</label>
-                <input
-                  type="date"
-                  name="memorizationStartedOn"
-                  defaultValue={editingStudent.memorizationStartedOn ? editingStudent.memorizationStartedOn.slice(0, 10) : ""}
-                  className="form-control font-bold"
-                />
-              </div>
-              <div>
-                <label className="form-label">ملاحظات الطالب</label>
-                <textarea
-                  name="notes"
-                  defaultValue={editingStudent.notes || ""}
-                  placeholder="ملاحظات حول سلوك أو أداء الطالب"
-                  className="form-control min-h-20 font-bold"
-                />
-              </div>
-              <div>
-                <label className="form-label">حالة الطالب داخل الحلقة</label>
-                <select
-                  name="isActive"
-                  defaultValue={editingStudent.isActive === false ? "false" : "true"}
-                  className="form-control font-bold"
-                >
-                  <option value="true">نشط</option>
-                  <option value="false">غير نشط (معطل)</option>
-                </select>
+                <label className="form-label">الاسم الكامل *</label>
+                <input type="text" name="fullName" defaultValue={editingStudent.fullName} required className="form-control font-bold" />
               </div>
 
-              <div className="mt-6 flex items-center justify-end gap-3 border-t border-[var(--border-color)] pt-4">
+              <div>
+                <label className="form-label">اسم الشهرة / العرض *</label>
+                <input type="text" name="displayName" defaultValue={editingStudent.displayName} required className="form-control font-bold" />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="form-label">رقم هاتف ولي الأمر</label>
+                  <input type="text" name="parentPhone" defaultValue={editingStudent.parentPhone || ""} className="form-control font-bold" />
+                </div>
+                <div>
+                  <label className="form-label">الصف الدراسي</label>
+                  <input type="text" name="gradeLevel" defaultValue={editingStudent.gradeLevel || ""} className="form-control font-bold" />
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">تاريخ بدء التحفيظ</label>
+                <input type="date" name="memorizationStartedOn" defaultValue={editingStudent.memorizationStartedOn || ""} className="form-control font-bold" />
+              </div>
+
+              <div>
+                <label className="form-label">ملاحظات عامة</label>
+                <input type="text" name="notes" defaultValue={editingStudent.notes || ""} placeholder="ملاحظات إضافية..." className="form-control font-bold" />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-[var(--border-color)]">
                 <button
                   type="button"
-                  disabled={busy}
                   onClick={() => setEditingStudent(null)}
-                  className="min-h-11 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-xs font-bold text-[var(--text-main)] hover:border-[var(--primary)]"
+                  className="rounded-2xl border border-[var(--border-color)] bg-[var(--card-soft)] px-5 py-2.5 text-xs font-black text-[var(--text-main)]"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={busy}
-                  className="min-h-11 rounded-xl bg-[var(--primary)] px-5 text-xs font-black text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+                  className="rounded-2xl bg-[var(--primary)] px-6 py-2.5 text-xs font-black text-white shadow-md hover:bg-[var(--primary-dark)] disabled:opacity-50"
                 >
                   {busy ? "جاري التحديث..." : "حفظ التعديلات"}
                 </button>
@@ -470,7 +434,10 @@ export function TeacherStudentsPanel({
         </div>
       ) : null}
 
-      {activeReport ? <ParentReportModal data={activeReport} onClose={() => setActiveReport(null)} /> : null}
+      {/* Parent Report Modal */}
+      {activeReport ? (
+        <ParentReportModal data={activeReport} onClose={() => setActiveReport(null)} />
+      ) : null}
     </div>
   );
 }
