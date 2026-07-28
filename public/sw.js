@@ -1,13 +1,6 @@
-const CACHE_NAME = "mutaqin-offline-shell-v12";
+const CACHE_NAME = "mutaqin-offline-shell-v13";
 const STATIC_ASSETS = [
   "/offline-shell.html",
-  "/offline-teacher",
-  "/offline-examiner",
-  "/offline-login",
-  "/",
-  "/login",
-  "/teacher",
-  "/examiner",
   "/manifest.json",
   "/brand/logo.png",
   "/icon-192.png",
@@ -112,7 +105,7 @@ function canCacheRequest(request, response) {
     const url = new URL(request.url);
     if (url.protocol !== "http:" && url.protocol !== "https:") return false;
     if (url.origin !== self.location.origin) return false;
-    if (url.pathname.startsWith("/manager") || url.pathname.startsWith("/api/manager")) return false;
+    if (url.pathname.startsWith("/manager") || url.pathname.startsWith("/api/")) return false;
   } catch {
     return false;
   }
@@ -126,11 +119,6 @@ async function safeCachePut(request, responseClone) {
     if (!canCacheRequest(request, responseClone)) return;
     const cache = await caches.open(CACHE_NAME);
     await cache.put(request, responseClone.clone());
-
-    const url = new URL(request.url);
-    if (["/login", "/teacher", "/examiner", "/", "/offline-teacher", "/offline-examiner", "/offline-login"].includes(url.pathname)) {
-      await cache.put(url.pathname, responseClone.clone());
-    }
   } catch (error) {
     console.warn("SW cache put skipped:", request.url, error);
   }
@@ -144,10 +132,51 @@ function isAppPageRequest(request, url) {
   return false;
 }
 
+async function cachePageAndItsNextAssets(cache, path) {
+  try {
+    const response = await fetch(path, { redirect: "follow" });
+    if (!response || !response.ok) return;
+
+    const html = await response.clone().text();
+
+    await cache.put(
+      path,
+      new Response(html, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      })
+    );
+
+    const assetMatches = [
+      ...html.matchAll(/(?:src|href)=["']([^"']*\/_next\/static\/[^"']+)["']/g),
+    ];
+
+    const assetUrls = Array.from(
+      new Set(assetMatches.map((match) => new URL(match[1], self.location.origin).toString()))
+    );
+
+    await Promise.allSettled(
+      assetUrls.map(async (assetUrl) => {
+        try {
+          const assetResponse = await fetch(assetUrl, { redirect: "follow" });
+          if (assetResponse && assetResponse.ok) {
+            await cache.put(assetUrl, assetResponse);
+          }
+        } catch (err) {
+          console.warn("SW pre-cache asset failed:", assetUrl, err);
+        }
+      })
+    );
+  } catch (err) {
+    console.warn("SW pre-cache page failed:", path, err);
+  }
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
+
+      // Pre-cache core static assets
       await Promise.all(
         STATIC_ASSETS.map(async (asset) => {
           try {
@@ -160,6 +189,11 @@ self.addEventListener("install", (event) => {
           }
         })
       );
+
+      // Cache offline routes and their Next.js JS/CSS chunks dynamically
+      await cachePageAndItsNextAssets(cache, "/offline-teacher");
+      await cachePageAndItsNextAssets(cache, "/offline-examiner");
+      await cachePageAndItsNextAssets(cache, "/offline-login");
     })()
   );
   self.skipWaiting();
@@ -215,7 +249,27 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Strategy for Next.js Static Chunks (/_next/static/*)
+  // Strategy for /offline-shell.html (Cache-First)
+  if (url.pathname === "/offline-shell.html") {
+    event.respondWith(
+      (async () => {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        try {
+          const networkResponse = await fetch(request);
+          if (networkResponse && networkResponse.ok) {
+            safeCachePut(request, networkResponse.clone());
+          }
+          return networkResponse;
+        } catch {
+          return new Response("Offline shell unavailable", { status: 503 });
+        }
+      })()
+    );
+    return;
+  }
+
+  // Strategy for Next.js Static Chunks (/_next/static/*) -> Cache-First
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(
       (async () => {
@@ -243,7 +297,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Strategy for App Shell & Page Navigations (/login, /teacher, /examiner, /, /offline-teacher, /offline-examiner, /offline-login)
+  // Strategy for App Shell & Page Navigations
   if (isAppPageRequest(request, url)) {
     event.respondWith(
       (async () => {
@@ -256,48 +310,29 @@ self.addEventListener("fetch", (event) => {
         } catch {
           const cache = await caches.open(CACHE_NAME);
 
-          // If navigating to dedicated offline teacher route
-          if (url.pathname.startsWith("/offline-teacher")) {
+          // Dedicated offline teacher route fallback
+          if (url.pathname.startsWith("/offline-teacher") || url.pathname.startsWith("/teacher")) {
             const fallback =
               (await cache.match("/offline-teacher")) ||
-              (await cache.match("/offline-shell.html")) ||
-              (await cache.match("/login"));
-            if (fallback) return fallback;
-          }
-
-          // If navigating to dedicated offline examiner route
-          if (url.pathname.startsWith("/offline-examiner")) {
-            const fallback =
-              (await cache.match("/offline-examiner")) ||
-              (await cache.match("/offline-shell.html")) ||
-              (await cache.match("/login"));
-            if (fallback) return fallback;
-          }
-
-          // If navigating to teacher route offline
-          if (url.pathname.startsWith("/teacher")) {
-            const fallback =
               (await cache.match("/teacher")) ||
-              (await cache.match("/offline-teacher")) ||
               (await cache.match("/offline-shell.html"));
             if (fallback) return fallback;
           }
 
-          // If navigating to examiner route offline
-          if (url.pathname.startsWith("/examiner")) {
+          // Dedicated offline examiner route fallback
+          if (url.pathname.startsWith("/offline-examiner") || url.pathname.startsWith("/examiner")) {
             const fallback =
-              (await cache.match("/examiner")) ||
               (await cache.match("/offline-examiner")) ||
+              (await cache.match("/examiner")) ||
               (await cache.match("/offline-shell.html"));
             if (fallback) return fallback;
           }
 
-          // Primary Offline Fallback for App Shell (/login, /, /offline-login, etc.)
+          // Primary Offline Fallback for App Shell
           const offlineShellFallback =
             (await cache.match("/offline-shell.html")) ||
             (await cache.match("/offline-login")) ||
-            (await cache.match("/login")) ||
-            (await cache.match("/"));
+            (await cache.match("/login"));
           if (offlineShellFallback) return offlineShellFallback;
 
           return new Response(OFFLINE_RESTRICTED_HTML, {

@@ -2,7 +2,7 @@
   "name": "مركز سيد الشهداء حمزة - نظام إدارة التحفيظ",
   "short_name": "تحفيظ حمزة",
   "description": "تطبيق إدارة الحلقات والتسميع والتقارير لمركز سيد الشهداء حمزة لتلاوة القرآن وتحفيظه",
-  "start_url": "/login",
+  "start_url": "/offline-shell.html",
   "scope": "/",
   "display": "standalone",
   "background_color": "#07583a",

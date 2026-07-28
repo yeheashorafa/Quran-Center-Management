@@ -15,9 +15,14 @@
       --emerald-hover: #065f46;
       --sky: #0369a1;
       --sky-hover: #075985;
+      --blue: #2563eb;
+      --blue-hover: #1d4ed8;
       --warning-bg: rgba(217, 119, 6, 0.15);
       --warning-border: rgba(245, 158, 11, 0.3);
       --warning-text: #fbbf24;
+      --online-bg: rgba(16, 185, 129, 0.15);
+      --online-border: rgba(16, 185, 129, 0.3);
+      --online-text: #34d399;
     }
     * {
       box-sizing: border-box;
@@ -58,6 +63,11 @@
       font-size: 0.8125rem;
       font-weight: 800;
       margin-bottom: 1.25rem;
+    }
+    .badge.is-online {
+      background-color: var(--online-bg);
+      border-color: var(--online-border);
+      color: var(--online-text);
     }
     .brand {
       font-size: 1.25rem;
@@ -107,6 +117,12 @@
     .btn:active {
       transform: scale(0.99);
     }
+    .btn-online {
+      background-color: var(--blue);
+    }
+    .btn-online:hover {
+      background-color: var(--blue-hover);
+    }
     .btn-teacher {
       background-color: var(--emerald);
     }
@@ -152,13 +168,19 @@
 <body>
 
   <div class="card">
-    <div class="badge">
-      <span>📡</span>
-      <span>وضع العمل أوفلاين (بدون إنترنت)</span>
+    <div id="status-badge" class="badge">
+      <span id="badge-icon">📡</span>
+      <span id="badge-text">وضع العمل أوفلاين (بدون إنترنت)</span>
     </div>
 
     <h1 class="brand">مركز سيد الشهداء حمزة</h1>
     <p class="subtext">نظام إدارة الحلقات والتسميع والتقارير الرسمية</p>
+
+    <div id="online-container" style="display: none; margin-bottom: 1rem;">
+      <a href="/login" class="btn btn-online">
+        🌐 تسجيل الدخول أونلاين (Online Login)
+      </a>
+    </div>
 
     <div class="divider"></div>
 
@@ -191,10 +213,32 @@
       const DB_VERSION = 3;
       const STORE_PROFILE = "offline_user_profile";
 
+      const badgeEl = document.getElementById("status-badge");
+      const badgeIconEl = document.getElementById("badge-icon");
+      const badgeTextEl = document.getElementById("badge-text");
+      const onlineContainer = document.getElementById("online-container");
       const loadingEl = document.getElementById("loading");
       const accountsEl = document.getElementById("accounts-container");
       const buttonsEl = document.getElementById("buttons-group");
       const noAccountsEl = document.getElementById("no-accounts-container");
+
+      function updateNetworkStatus() {
+        if (navigator.onLine) {
+          badgeEl.className = "badge is-online";
+          badgeIconEl.textContent = "🟢";
+          badgeTextEl.textContent = "الجهاز متصل بالإنترنت";
+          onlineContainer.style.display = "block";
+        } else {
+          badgeEl.className = "badge";
+          badgeIconEl.textContent = "📡";
+          badgeTextEl.textContent = "وضع العمل أوفلاين (بدون إنترنت)";
+          onlineContainer.style.display = "none";
+        }
+      }
+
+      window.addEventListener("online", updateNetworkStatus);
+      window.addEventListener("offline", updateNetworkStatus);
+      updateNetworkStatus();
 
       if (!("indexedDB" in window)) {
         loadingEl.style.display = "none";
@@ -211,27 +255,60 @@
 
       req.onsuccess = function (event) {
         const db = event.target.result;
-        if (!db.objectStoreNames.contains(STORE_PROFILE)) {
+        const stores = [];
+
+        if (db.objectStoreNames.contains(STORE_PROFILE)) stores.push(STORE_PROFILE);
+        if (db.objectStoreNames.contains("teacher_cache")) stores.push("teacher_cache");
+        if (db.objectStoreNames.contains("examiner_cache")) stores.push("examiner_cache");
+
+        if (stores.length === 0) {
           loadingEl.style.display = "none";
           noAccountsEl.style.display = "block";
           return;
         }
 
-        const tx = db.transaction(STORE_PROFILE, "readonly");
-        const store = tx.objectStore(STORE_PROFILE);
+        const tx = db.transaction(stores, "readonly");
+        let teacherName = null;
+        let examinerName = null;
 
-        let teacherProfile = null;
-        let examinerProfile = null;
+        if (stores.includes(STORE_PROFILE)) {
+          const profileStore = tx.objectStore(STORE_PROFILE);
+          const reqTeacher = profileStore.get("TEACHER");
+          reqTeacher.onsuccess = function () {
+            if (reqTeacher.result && reqTeacher.result.role === "TEACHER") {
+              teacherName = reqTeacher.result.teacherName || "الشيخ";
+            }
+          };
 
-        const reqTeacher = store.get("TEACHER");
-        reqTeacher.onsuccess = function () {
-          teacherProfile = reqTeacher.result || null;
-        };
+          const reqExaminer = profileStore.get("EXAMINER");
+          reqExaminer.onsuccess = function () {
+            if (reqExaminer.result && reqExaminer.result.role === "EXAMINER") {
+              examinerName = reqExaminer.result.examinerName || "المختبر";
+            }
+          };
+        }
 
-        const reqExaminer = store.get("EXAMINER");
-        reqExaminer.onsuccess = function () {
-          examinerProfile = reqExaminer.result || null;
-        };
+        if (stores.includes("teacher_cache")) {
+          const tStore = tx.objectStore("teacher_cache");
+          const reqAllT = tStore.getAll();
+          reqAllT.onsuccess = function () {
+            if (!teacherName && reqAllT.result && reqAllT.result.length > 0) {
+              const rec = reqAllT.result[0];
+              teacherName = rec.dashboard?.teacherName || rec.teacherName || "الشيخ";
+            }
+          };
+        }
+
+        if (stores.includes("examiner_cache")) {
+          const eStore = tx.objectStore("examiner_cache");
+          const reqAllE = eStore.getAll();
+          reqAllE.onsuccess = function () {
+            if (!examinerName && reqAllE.result && reqAllE.result.length > 0) {
+              const rec = reqAllE.result[0];
+              examinerName = rec.options?.examinerName || rec.examinerName || "المختبر";
+            }
+          };
+        }
 
         tx.oncomplete = function () {
           loadingEl.style.display = "none";
@@ -239,12 +316,12 @@
           let hasAccount = false;
           buttonsEl.innerHTML = "";
 
-          if (teacherProfile && teacherProfile.role === "TEACHER") {
+          if (teacherName) {
             hasAccount = true;
             const btn = document.createElement("button");
             btn.className = "btn btn-teacher";
             btn.type = "button";
-            btn.innerHTML = "📖 الدخول أوفلاين كشيخ (" + (teacherProfile.teacherName || "الشيخ") + ")";
+            btn.innerHTML = "📖 الدخول أوفلاين كشيخ (" + teacherName + ")";
             btn.onclick = function () {
               try {
                 localStorage.setItem("offline_role", "TEACHER");
@@ -254,12 +331,12 @@
             buttonsEl.appendChild(btn);
           }
 
-          if (examinerProfile && examinerProfile.role === "EXAMINER") {
+          if (examinerName) {
             hasAccount = true;
             const btn = document.createElement("button");
             btn.className = "btn btn-examiner";
             btn.type = "button";
-            btn.innerHTML = "📝 الدخول أوفلاين كمختبر (" + (examinerProfile.examinerName || "المختبر") + ")";
+            btn.innerHTML = "📝 الدخول أوفلاين كمختبر (" + examinerName + ")";
             btn.onclick = function () {
               try {
                 localStorage.setItem("offline_role", "EXAMINER");
