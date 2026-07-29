@@ -16,7 +16,13 @@ import { ParentReportSelector } from "@/components/reports/parent-report-selecto
 import type { ManagerDailyMonitoringData } from "@/lib/manager-monitoring/types";
 import type { MonthlyReportOptions } from "@/lib/reports/types";
 import type { OfficialExamListItem } from "@/lib/official-exams/types";
-import { saveManagerDataCache } from "@/lib/offline/manager-cache";
+import {
+  saveManagerDataCache,
+  getManagerDataCache,
+  addOfflineUserToManagerCache,
+  addOfflineHalaqaToManagerCache,
+} from "@/lib/offline/manager-cache";
+import { enqueueSyncItem } from "@/lib/offline/sync-queue";
 
 type ActiveTab = "monitoring" | "alerts" | "followup" | "exams" | "reports" | "parent_report" | "students" | "halaqat" | "users" | "audit";
 
@@ -58,7 +64,7 @@ async function readApiMessage(response: Response): Promise<string> {
 }
 
 export function ManagementPanel({
-  data,
+  data: initialData,
   monitoringData,
   reportOptions,
   officialExams = [],
@@ -73,10 +79,49 @@ export function ManagementPanel({
   isOffline?: boolean;
 }) {
   const router = useRouter();
+  const [data, setData] = useState<ManagerDashboardData>(initialData);
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [halaqaDeleteModal, setHalaqaDeleteModal] = useState<HalaqaDeleteModalState | null>(null);
+
+  // Merge pending offline drafts from IndexedDB cache
+  useEffect(() => {
+    let isMounted = true;
+    void getManagerDataCache().then((cache) => {
+      if (!isMounted || !cache) return;
+      const pendingUsers = cache.data.users.filter((u) => u.isPendingSync || u.id.startsWith("temp_user"));
+      const pendingHalaqat = cache.data.halaqat.filter((h) => h.isPendingSync || h.id.startsWith("temp_halaqa"));
+
+      if (pendingUsers.length > 0 || pendingHalaqat.length > 0) {
+        setData((prev) => {
+          const mergedUsers = [...prev.users];
+          for (const pUser of pendingUsers) {
+            if (!mergedUsers.some((u) => u.id === pUser.id)) {
+              mergedUsers.push(pUser);
+            }
+          }
+
+          const mergedHalaqat = [...prev.halaqat];
+          for (const pHalaqa of pendingHalaqat) {
+            if (!mergedHalaqat.some((h) => h.id === pHalaqa.id)) {
+              mergedHalaqat.push(pHalaqa);
+            }
+          }
+
+          return {
+            ...prev,
+            users: mergedUsers,
+            halaqat: mergedHalaqat,
+          };
+        });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initialData]);
 
   // Automatically save snapshot to IndexedDB when viewing online
   useEffect(() => {
@@ -165,26 +210,103 @@ export function ManagementPanel({
 
   async function createHalaqa(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
-      showResult("error", "هذه العملية تحتاج اتصالاً بالإنترنت.");
-      return;
-    }
-    const form = event.currentTarget;
-    const formData = new FormData(form);
     setBusyKey("create-halaqa");
     setNotice(null);
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    const nameAr = String(formData.get("nameAr") || "").trim();
+    const teacherUserId = String(formData.get("teacherUserId") || "").trim();
+    const effectiveFrom = String(formData.get("effectiveFrom") || "").trim();
+    const notes = String(formData.get("notes") || "").trim();
+
+    if (nameAr.length < 2) {
+      showResult("error", "أدخل اسم الحلقة (حرفين على الأقل).");
+      setBusyKey(null);
+      return;
+    }
+    if (!teacherUserId) {
+      showResult("error", "اختر الشيخ المسؤول عن الحلقة.");
+      setBusyKey(null);
+      return;
+    }
+    if (!halaqaWeekdays.length) {
+      showResult("error", "اختر يوماً واحداً على الأقل لأيام الحلقة.");
+      setBusyKey(null);
+      return;
+    }
+
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      try {
+        const tempHalaqaId = `temp_halaqa_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const idempotencyKey = `create_halaqa_${tempHalaqaId}_${Date.now()}`;
+        const dependencyId = teacherUserId.startsWith("temp_user") ? teacherUserId : null;
+
+        const stage = data.stages.find((s) => s.id === halaqaStageId);
+        const teacher = data.users.find((u) => u.id === teacherUserId);
+
+        const newHalaqa: import("@/lib/manager/types").ManagerHalaqaItem = {
+          id: tempHalaqaId,
+          code: `H_${Date.now().toString().slice(-4)}`,
+          nameAr,
+          status: "ACTIVE",
+          notes: notes || null,
+          stage: stage ? { id: stage.id, nameAr: stage.nameAr } : null,
+          primaryTeacher: teacher ? { id: teacher.id, displayName: teacher.displayName } : null,
+          weekdays: halaqaWeekdays as WeekdayCode[],
+          activeStudentsCount: 0,
+          isPendingSync: true,
+          tempId: tempHalaqaId,
+        };
+
+        await addOfflineHalaqaToManagerCache(newHalaqa);
+
+        await enqueueSyncItem({
+          type: "create_halaqa",
+          endpoint: "/api/manager/halaqat",
+          method: "POST",
+          payload: {
+            tempHalaqaId,
+            nameAr,
+            stageId: halaqaStageId,
+            teacherUserId,
+            weekdays: halaqaWeekdays,
+            effectiveFrom,
+            notes,
+            idempotencyKey,
+            dependencyId,
+          },
+          dependencyId,
+        });
+
+        setData((prev) => ({
+          ...prev,
+          halaqat: [...prev.halaqat, newHalaqa],
+        }));
+
+        form.reset();
+        setHalaqaWeekdays(firstStage?.defaultWeekdays ?? []);
+        showResult("success", "تم حفظ مسودة الحلقة محلياً (بانتظار المزامنة). وسترفع تلقائياً عند عودة الشبكة.");
+      } catch {
+        showResult("error", "تعذر حفظ مسودة الحلقة محلياً.");
+      } finally {
+        setBusyKey(null);
+      }
+      return;
+    }
 
     try {
       const response = await fetch("/api/manager/halaqat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nameAr: formData.get("nameAr"),
+          nameAr,
           stageId: halaqaStageId,
-          teacherUserId: formData.get("teacherUserId"),
+          teacherUserId,
           weekdays: halaqaWeekdays,
-          effectiveFrom: formData.get("effectiveFrom"),
-          notes: formData.get("notes"),
+          effectiveFrom,
+          notes,
         }),
       });
 
@@ -204,24 +326,85 @@ export function ManagementPanel({
 
   async function createUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
-      showResult("error", "هذه العملية تحتاج اتصالاً بالإنترنت.");
-      return;
-    }
-    const form = event.currentTarget;
-    const formData = new FormData(form);
     setBusyKey("create-user");
     setNotice(null);
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    const displayName = String(formData.get("displayName") || "").trim();
+    const username = String(formData.get("username") || "").trim();
+    const password = String(formData.get("password") || "").trim();
+    const role = String(formData.get("role") || "TEACHER") as AppRoleCode;
+
+    if (displayName.length < 2) {
+      showResult("error", "أدخل اسم المستخدم الظاهر (حرفين على الأقل).");
+      setBusyKey(null);
+      return;
+    }
+    if (username.length < 3) {
+      showResult("error", "اسم المستخدم يجب أن يتكون من 3 أحرف على الأقل.");
+      setBusyKey(null);
+      return;
+    }
+
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      try {
+        const tempUserId = `temp_user_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const idempotencyKey = `create_user_${tempUserId}_${Date.now()}`;
+        const roleNameAr = role === "TEACHER" ? "محفظ" : role === "EXAMINER" ? "مختبر" : "مدير النظام";
+
+        const newUser: import("@/lib/manager/types").ManagerUserItem = {
+          id: tempUserId,
+          username,
+          displayName,
+          status: "ACTIVE",
+          roles: [{ code: role, nameAr: roleNameAr }],
+          activeHalaqat: [],
+          isCurrentUser: false,
+          isPendingSync: true,
+          tempId: tempUserId,
+        };
+
+        await addOfflineUserToManagerCache(newUser);
+
+        await enqueueSyncItem({
+          type: "create_user",
+          endpoint: "/api/manager/users",
+          method: "POST",
+          payload: {
+            tempUserId,
+            username,
+            displayName,
+            role: role as "TEACHER" | "CENTER_MANAGER" | "EXAMINER",
+            idempotencyKey,
+          },
+        });
+
+        setData((prev) => ({
+          ...prev,
+          users: [...prev.users, newUser],
+        }));
+
+        form.reset();
+        showResult("success", "تم حفظ مسودة المستخدم محلياً (بدون كلمة مرور - بانتظار المزامنة). عند عودة الشبكة سيتم إنشاؤه وتعيين كلمة مرور له.");
+      } catch {
+        showResult("error", "تعذر حفظ مسودة المستخدم محلياً.");
+      } finally {
+        setBusyKey(null);
+      }
+      return;
+    }
 
     try {
       const response = await fetch("/api/manager/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          displayName: formData.get("displayName"),
-          username: formData.get("username"),
-          password: formData.get("password"),
-          role: formData.get("role"),
+          displayName,
+          username,
+          password,
+          role,
         }),
       });
 
@@ -747,6 +930,11 @@ export function ManagementPanel({
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-lg font-black text-[var(--text-main)]">{halaqa.nameAr}</h3>
                       <StatusBadge active={halaqa.status === "ACTIVE"} />
+                      {halaqa.isPendingSync || halaqa.id.startsWith("temp_halaqa") ? (
+                        <span className="rounded-xl border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                          ⏳ مسودة - بانتظار المزامنة
+                        </span>
+                      ) : null}
                     </div>
                     <p className="mt-1 text-xs text-[var(--text-muted)]">{halaqa.code}</p>
                   </div>
@@ -827,16 +1015,23 @@ export function ManagementPanel({
                 <input className="form-control font-bold" id="username" name="username" autoComplete="off" placeholder="ahmad" required />
               </div>
               <div>
-                <label className="form-label" htmlFor="new-password">كلمة الدخول</label>
+                <label className="form-label" htmlFor="new-password">
+                  كلمة الدخول {isOffline || (typeof navigator !== "undefined" && !navigator.onLine) ? "(مسودة أوفلاين)" : ""}
+                </label>
                 <input
-                  className="form-control font-bold"
+                  className="form-control font-bold disabled:opacity-60"
                   id="new-password"
                   name="password"
                   type="password"
                   minLength={6}
                   autoComplete="new-password"
-                  placeholder="6 خانات على الأقل"
-                  required
+                  placeholder={
+                    isOffline || (typeof navigator !== "undefined" && !navigator.onLine)
+                      ? "تتم المزامنة بدون كلمة مرور وتُطلب عند عودة الإنترنت"
+                      : "6 خانات على الأقل"
+                  }
+                  required={!isOffline && (typeof navigator === "undefined" || navigator.onLine)}
+                  disabled={isOffline || (typeof navigator !== "undefined" && !navigator.onLine)}
                 />
               </div>
               <div>
@@ -872,6 +1067,11 @@ export function ManagementPanel({
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-lg font-black text-[var(--text-main)]">{user.displayName}</h3>
                       <StatusBadge active={user.status === "ACTIVE"} label={user.status === "LOCKED" ? "موقوف مؤقتاً" : undefined} />
+                      {user.isPendingSync || user.id.startsWith("temp_user") ? (
+                        <span className="rounded-xl border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                          ⏳ مسودة - بانتظار المزامنة
+                        </span>
+                      ) : null}
                     </div>
                     <p className="mt-1 text-sm text-[var(--text-muted)]">@{user.username}</p>
                   </div>

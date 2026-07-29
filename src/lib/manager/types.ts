@@ -26,6 +26,8 @@ export type ManagerUserItem = {
     nameAr: string;
   }>;
   isCurrentUser: boolean;
+  isPendingSync?: boolean;
+  tempId?: string;
 };
 
 export type ManagerHalaqaItem = {
@@ -44,6 +46,8 @@ export type ManagerHalaqaItem = {
   } | null;
   weekdays: WeekdayCode[];
   activeStudentsCount: number;
+  isPendingSync?: boolean;
+  tempId?: string;
 };
 
 export type ManagerDashboardData = {

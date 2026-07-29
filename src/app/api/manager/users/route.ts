@@ -88,7 +88,10 @@ export async function POST(request: Request) {
 
   const input = parsed.data;
   const normalizedUsername = normalizeUsername(input.username);
-  const passwordHash = await hashPassword(input.password);
+  const rawPassword = input.password && input.password.trim().length >= 6
+    ? input.password
+    : `Mutaqin#${Math.floor(100000 + Math.random() * 900000)}`;
+  const passwordHash = await hashPassword(rawPassword);
   const requestId = randomUUID();
   const ipAddress = getRequestIp(request);
   const userAgent = getRequestUserAgent(request);

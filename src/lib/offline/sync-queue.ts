@@ -3,6 +3,7 @@
 import { idbDelete, idbGetAll, idbPut, STORES } from "./indexed-db";
 import { removeSessionDraft, replaceTempStudentIdInSessionDrafts } from "./session-drafts";
 import { replaceTempStudentIdInTeacherCache } from "./teacher-cache";
+import { replaceTempHalaqaIdInManagerCache, replaceTempUserIdInManagerCache } from "./manager-cache";
 
 export type SyncQueueItemStatus = "pending" | "syncing" | "synced" | "failed" | "conflict";
 
@@ -48,12 +49,37 @@ export type StudentCreateSyncPayload = {
   idempotencyKey: string;
 };
 
+export type UserCreateSyncPayload = {
+  tempUserId: string;
+  username: string;
+  displayName: string;
+  role: "TEACHER" | "CENTER_MANAGER" | "EXAMINER";
+  idempotencyKey: string;
+};
+
+export type HalaqaCreateSyncPayload = {
+  tempHalaqaId: string;
+  nameAr: string;
+  stageId: string;
+  teacherUserId: string;
+  weekdays: string[];
+  effectiveFrom: string;
+  notes?: string | null;
+  idempotencyKey: string;
+  dependencyId?: string | null;
+};
+
 export type SyncQueueItem = {
   queueId: string;
-  type: "save_student" | "save_session" | "save_official_exam" | "create_student";
+  type: "save_student" | "save_session" | "save_official_exam" | "create_student" | "create_user" | "create_halaqa";
   endpoint: string;
   method: "PUT" | "POST";
-  payload: SessionSyncPayload | OfficialExamSyncPayload | StudentCreateSyncPayload;
+  payload:
+    | SessionSyncPayload
+    | OfficialExamSyncPayload
+    | StudentCreateSyncPayload
+    | UserCreateSyncPayload
+    | HalaqaCreateSyncPayload;
   createdAt: number;
   updatedAt: number;
   status: SyncQueueItemStatus;
@@ -62,6 +88,7 @@ export type SyncQueueItem = {
   halaqaId?: string;
   sessionDate?: string;
   examinerId?: string;
+  dependencyId?: string | null;
 };
 
 export async function enqueueSyncItem(
@@ -181,6 +208,17 @@ export async function processSyncQueue(
     return { success: 0, failed: 0 };
   }
 
+  // Sort pending items by dependency order: create_user -> create_halaqa -> create_student -> others
+  const typePriority: Record<string, number> = {
+    create_user: 1,
+    create_halaqa: 2,
+    create_student: 3,
+    save_session: 4,
+    save_official_exam: 5,
+    save_student: 6,
+  };
+  pendingItems.sort((a, b) => (typePriority[a.type] || 10) - (typePriority[b.type] || 10));
+
   onStatusChange?.("syncing", pendingItems.length);
 
   let successCount = 0;
@@ -188,6 +226,20 @@ export async function processSyncQueue(
 
   for (const item of pendingItems) {
     if (typeof navigator !== "undefined" && !navigator.onLine) break;
+
+    // Dependency check for create_halaqa depending on a pending temp_user
+    if (item.type === "create_halaqa" && item.dependencyId) {
+      const isDependencyStillPending = pendingItems.some(
+        (depItem) =>
+          depItem.type === "create_user" &&
+          (depItem.payload as UserCreateSyncPayload).tempUserId === item.dependencyId &&
+          (depItem.status === "pending" || depItem.status === "failed" || depItem.status === "conflict"),
+      );
+      if (isDependencyStillPending) {
+        // Skip until teacher user is created first
+        continue;
+      }
+    }
 
     item.status = "syncing";
     item.updatedAt = Date.now();
@@ -205,6 +257,23 @@ export async function processSyncQueue(
           gradeLevel: p.gradeLevel,
           memorizationStartedOn: p.memorizationStartedOn,
         };
+      } else if (item.type === "create_user") {
+        const p = item.payload as UserCreateSyncPayload;
+        bodyPayload = {
+          username: p.username,
+          displayName: p.displayName,
+          role: p.role,
+        };
+      } else if (item.type === "create_halaqa") {
+        const p = item.payload as HalaqaCreateSyncPayload;
+        bodyPayload = {
+          nameAr: p.nameAr,
+          stageId: p.stageId,
+          teacherUserId: p.teacherUserId,
+          weekdays: p.weekdays,
+          effectiveFrom: p.effectiveFrom,
+          notes: p.notes,
+        };
       }
 
       const response = await fetch(item.endpoint, {
@@ -213,6 +282,10 @@ export async function processSyncQueue(
           "Content-Type": "application/json",
           ...(item.type === "create_student"
             ? { "X-Idempotency-Key": (item.payload as StudentCreateSyncPayload).idempotencyKey }
+            : item.type === "create_user"
+            ? { "X-Idempotency-Key": (item.payload as UserCreateSyncPayload).idempotencyKey }
+            : item.type === "create_halaqa"
+            ? { "X-Idempotency-Key": (item.payload as HalaqaCreateSyncPayload).idempotencyKey }
             : {}),
         },
         body: JSON.stringify(bodyPayload),
@@ -251,6 +324,29 @@ export async function processSyncQueue(
               }
             }
           }
+        } else if (item.type === "create_user" && json.user?.id) {
+          const p = item.payload as UserCreateSyncPayload;
+          const realUserId = json.user.id as string;
+
+          await replaceTempUserIdInManagerCache(p.tempUserId, realUserId);
+
+          const allItems = await getAllSyncItems();
+          for (const qItem of allItems) {
+            if (qItem.type === "create_halaqa") {
+              const hPayload = qItem.payload as HalaqaCreateSyncPayload;
+              if (hPayload.teacherUserId === p.tempUserId || qItem.dependencyId === p.tempUserId) {
+                hPayload.teacherUserId = realUserId;
+                qItem.dependencyId = null;
+                await idbPut(STORES.SYNC_QUEUE, qItem);
+              }
+            }
+          }
+        } else if (item.type === "create_halaqa") {
+          const p = item.payload as HalaqaCreateSyncPayload;
+          const realHalaqaId = (json.halaqah?.id || json.halaqaId || json.id) as string;
+          if (realHalaqaId) {
+            await replaceTempHalaqaIdInManagerCache(p.tempHalaqaId, realHalaqaId);
+          }
         }
 
         item.status = "synced";
@@ -269,10 +365,14 @@ export async function processSyncQueue(
         break; // Stop syncing until user re-logs in
       } else if (response.status === 409) {
         item.status = "conflict";
-        item.errorMessage = item.type === "create_student"
+        item.errorMessage = item.type === "create_user"
+          ? "اسم المستخدم موجود مسبقاً على الخادم (تعارض 409). لم تُحذف المسودة محلياً."
+          : item.type === "create_halaqa"
+          ? "اسم الحلقة مستخدم مسبقاً على الخادم (تعارض 409). لم تُحذف المسودة محلياً."
+          : item.type === "create_student"
           ? "يوجد تعارض في إضافة الطالب على الخادم (409). لم تُحذف مسودة الطالب المحلية."
           : item.type === "save_official_exam"
-          ? "تم تسجيل اختبار على الخادم لنفس الطالب والتاريخ من جهاز آخر (تعارض 409). لم تُحذف البيانات المحفوظة محلياً."
+          ? "تم تسجيل اختبار على الخادم لنفس الطالب والتاريخ من جهاز أمر (تعارض 409). لم تُحذف البيانات المحفوظة محلياً."
           : "يوجد تعديل أحدث على هذه الجلسة من جهاز آخر (تعارض 409). راجع الجلسة قبل المزامنة.";
         item.updatedAt = Date.now();
         await idbPut(STORES.SYNC_QUEUE, item);

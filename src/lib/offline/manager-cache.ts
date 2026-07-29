@@ -85,3 +85,95 @@ export async function clearManagerDataCache(): Promise<void> {
     console.warn("Failed to clear manager cache:", err);
   }
 }
+
+export async function addOfflineUserToManagerCache(user: import("@/lib/manager/types").ManagerUserItem): Promise<void> {
+  const cache = await getManagerDataCache();
+  if (!cache) return;
+
+  const existingIndex = cache.data.users.findIndex((u) => u.id === user.id);
+  if (existingIndex >= 0) {
+    cache.data.users[existingIndex] = user;
+  } else {
+    cache.data.users.push(user);
+  }
+
+  cache.cachedAt = Date.now();
+  await idbPut(STORES.MANAGER_CACHE, cache);
+}
+
+export async function addOfflineHalaqaToManagerCache(halaqa: import("@/lib/manager/types").ManagerHalaqaItem): Promise<void> {
+  const cache = await getManagerDataCache();
+  if (!cache) return;
+
+  const existingIndex = cache.data.halaqat.findIndex((h) => h.id === halaqa.id);
+  if (existingIndex >= 0) {
+    cache.data.halaqat[existingIndex] = halaqa;
+  } else {
+    cache.data.halaqat.push(halaqa);
+  }
+
+  cache.cachedAt = Date.now();
+  await idbPut(STORES.MANAGER_CACHE, cache);
+}
+
+export async function replaceTempUserIdInManagerCache(tempUserId: string, realUserId: string): Promise<void> {
+  const cache = await getManagerDataCache();
+  if (!cache) return;
+
+  let modified = false;
+  cache.data.users = cache.data.users.map((u) => {
+    if (u.id === tempUserId || u.tempId === tempUserId) {
+      modified = true;
+      return {
+        ...u,
+        id: realUserId,
+        isPendingSync: false,
+        tempId: undefined,
+      };
+    }
+    return u;
+  });
+
+  cache.data.halaqat = cache.data.halaqat.map((h) => {
+    if (h.primaryTeacher?.id === tempUserId) {
+      modified = true;
+      return {
+        ...h,
+        primaryTeacher: {
+          ...h.primaryTeacher,
+          id: realUserId,
+        },
+      };
+    }
+    return h;
+  });
+
+  if (modified) {
+    cache.cachedAt = Date.now();
+    await idbPut(STORES.MANAGER_CACHE, cache);
+  }
+}
+
+export async function replaceTempHalaqaIdInManagerCache(tempHalaqaId: string, realHalaqaId: string): Promise<void> {
+  const cache = await getManagerDataCache();
+  if (!cache) return;
+
+  let modified = false;
+  cache.data.halaqat = cache.data.halaqat.map((h) => {
+    if (h.id === tempHalaqaId || h.tempId === tempHalaqaId) {
+      modified = true;
+      return {
+        ...h,
+        id: realHalaqaId,
+        isPendingSync: false,
+        tempId: undefined,
+      };
+    }
+    return h;
+  });
+
+  if (modified) {
+    cache.cachedAt = Date.now();
+    await idbPut(STORES.MANAGER_CACHE, cache);
+  }
+}

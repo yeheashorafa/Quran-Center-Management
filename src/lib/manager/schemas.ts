@@ -15,7 +15,9 @@ export const createManagedUserSchema = z.object({
   password: z
     .string()
     .min(6, "كلمة الدخول يجب أن تتكون من 6 خانات على الأقل.")
-    .max(128, "كلمة الدخول طويلة جداً."),
+    .max(128, "كلمة الدخول طويلة جداً.")
+    .optional()
+    .nullable(),
   role: z.enum(["TEACHER", "CENTER_MANAGER", "EXAMINER"]),
 });
 
@@ -67,8 +69,8 @@ export const createHalaqaSchema = z.object({
     .trim()
     .min(2, "أدخل اسم الحلقة.")
     .max(160, "اسم الحلقة طويل جداً."),
-  stageId: z.string().uuid("المرحلة غير صالحة."),
-  teacherUserId: z.string().uuid("اختر الشيخ المسؤول."),
+  stageId: z.string().min(1, "المرحلة غير صالحة."),
+  teacherUserId: z.string().min(1, "اختر الشيخ المسؤول."),
   weekdays: z.array(z.enum(WEEKDAY_CODES)).min(1, "اختر يوماً واحداً على الأقل."),
   effectiveFrom: z
     .string()
