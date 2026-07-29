@@ -273,7 +273,7 @@ export function TeacherSessionPanel({
         void saveOfflineTeacherProfile({
           teacherId: "teacher",
           halaqaId,
-          teacherName: dashboard?.teacherName || "الشيخ",
+          teacherName: "الشيخ",
           halaqaName: data.halaqa.nameAr,
           cachedAt: Date.now(),
           lastOnlineLoginAt: Date.now(),
