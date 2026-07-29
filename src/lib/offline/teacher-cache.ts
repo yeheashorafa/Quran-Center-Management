@@ -65,3 +65,51 @@ export async function getTeacherDataCache(
 export async function clearTeacherDataCache(): Promise<void> {
   await idbClear(STORES.TEACHER_CACHE);
 }
+
+export async function addOfflineStudentToTeacherCache(
+  teacherId: string,
+  halaqaId: string,
+  newStudent: SessionStudentValue,
+): Promise<void> {
+  const cache = await getTeacherDataCache(teacherId, halaqaId);
+  if (!cache) return;
+
+  const existingIndex = cache.students.findIndex((s) => s.studentId === newStudent.studentId);
+  if (existingIndex >= 0) {
+    cache.students[existingIndex] = newStudent;
+  } else {
+    cache.students.push(newStudent);
+  }
+
+  cache.cachedAt = Date.now();
+  await idbPut(STORES.TEACHER_CACHE, cache);
+}
+
+export async function replaceTempStudentIdInTeacherCache(
+  teacherId: string,
+  halaqaId: string,
+  tempStudentId: string,
+  realStudentId: string,
+): Promise<void> {
+  const cache = await getTeacherDataCache(teacherId, halaqaId);
+  if (!cache) return;
+
+  let modified = false;
+  cache.students = cache.students.map((s) => {
+    if (s.studentId === tempStudentId || s.tempId === tempStudentId) {
+      modified = true;
+      return {
+        ...s,
+        studentId: realStudentId,
+        isPendingSync: false,
+        tempId: undefined,
+      };
+    }
+    return s;
+  });
+
+  if (modified) {
+    cache.cachedAt = Date.now();
+    await idbPut(STORES.TEACHER_CACHE, cache);
+  }
+}

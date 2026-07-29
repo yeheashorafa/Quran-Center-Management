@@ -56,3 +56,35 @@ export async function removeSessionDraft(
   const draftId = makeDraftId(teacherId, halaqaId, sessionDate);
   await idbDelete(STORES.SESSION_DRAFTS, draftId);
 }
+
+export async function replaceTempStudentIdInSessionDrafts(
+  tempStudentId: string,
+  realStudentId: string,
+): Promise<void> {
+  try {
+    const { idbGetAll } = await import("./indexed-db");
+    const drafts = await idbGetAll<SessionDraftRecord>(STORES.SESSION_DRAFTS);
+    for (const draft of drafts) {
+      let modified = false;
+      const updatedStudents = draft.students.map((s) => {
+        if (s.studentId === tempStudentId || s.tempId === tempStudentId) {
+          modified = true;
+          return {
+            ...s,
+            studentId: realStudentId,
+            isPendingSync: false,
+            tempId: undefined,
+          };
+        }
+        return s;
+      });
+      if (modified) {
+        draft.students = updatedStudents;
+        draft.lastUpdatedAt = Date.now();
+        await idbPut(STORES.SESSION_DRAFTS, draft);
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to replace tempStudentId in drafts:", err);
+  }
+}

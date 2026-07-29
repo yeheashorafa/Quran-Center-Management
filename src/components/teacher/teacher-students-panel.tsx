@@ -3,6 +3,9 @@
 import { useState, type FormEvent } from "react";
 import { ParentReportModal } from "@/components/reports/parent-report-modal";
 import type { ParentReportData } from "@/lib/reports/parent-report-types";
+import { addOfflineStudentToTeacherCache } from "@/lib/offline/teacher-cache";
+import { enqueueSyncItem } from "@/lib/offline/sync-queue";
+import type { SessionStudentValue } from "@/lib/memorization-sessions/types";
 
 export type TeacherStudentItem = {
   studentId: string;
@@ -15,18 +18,24 @@ export type TeacherStudentItem = {
   memorizationStartedOn: string | null;
   notes?: string | null;
   isActive?: boolean;
+  isPendingSync?: boolean;
 };
+
+const ARABIC_REGEX = /^[\u0600-\u06FF\s]+$/;
+const PHONE_REGEX = /^[0-9]{7,15}$/;
 
 export function TeacherStudentsPanel({
   halaqaId,
   students,
   onRefresh,
   isOffline = false,
+  teacherId = "teacher",
 }: {
   halaqaId: string;
   students: TeacherStudentItem[];
   onRefresh: () => void;
   isOffline?: boolean;
+  teacherId?: string;
 }) {
   const [query, setQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -45,27 +54,99 @@ export function TeacherStudentsPanel({
 
   async function handleAddStudent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
-      setNotice({ type: "error", text: "إضافة الطلاب تحتاج اتصالاً بالإنترنت." });
-      return;
-    }
-
     setBusy(true);
     setNotice(null);
 
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    const fullName = String(formData.get("fullName") || "").trim();
+    const displayName = String(formData.get("displayName") || "").trim();
+    const parentPhone = String(formData.get("parentPhone") || "").trim() || null;
+    const gradeLevel = String(formData.get("gradeLevel") || "").trim() || null;
+    const memorizationStartedOn = String(formData.get("memorizationStartedOn") || "").trim() || null;
+
+    if (fullName.length < 3 || !ARABIC_REGEX.test(fullName)) {
+      setNotice({ type: "error", text: "يجب أن يكون الاسم الكامل 3 أحرف على الأقل باللغة العربية فقط." });
+      setBusy(false);
+      return;
+    }
+    if (displayName.length < 2 || !ARABIC_REGEX.test(displayName)) {
+      setNotice({ type: "error", text: "يجب أن يكون اسم العرض حرفين على الأقل باللغة العربية فقط." });
+      setBusy(false);
+      return;
+    }
+    if (parentPhone && !PHONE_REGEX.test(parentPhone)) {
+      setNotice({ type: "error", text: "رقم الهاتف يجب أن يحتوي على أرقام فقط (من 7 إلى 15 رقم)." });
+      setBusy(false);
+      return;
+    }
+
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      try {
+        const tempStudentId = `temp_student_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const tempEnrollmentId = `temp_enrollment_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const idempotencyKey = `create_student_${tempStudentId}_${Date.now()}`;
+
+        const newStudent: SessionStudentValue = {
+          studentId: tempStudentId,
+          enrollmentId: tempEnrollmentId,
+          displayName,
+          fullName,
+          attendance: "PENDING",
+          notes: "",
+          itemId: null,
+          version: null,
+          activities: [],
+          isPendingSync: true,
+          tempId: tempStudentId,
+        };
+
+        await addOfflineStudentToTeacherCache(teacherId, halaqaId, newStudent);
+
+        await enqueueSyncItem({
+          type: "create_student",
+          endpoint: "/api/teacher/students",
+          method: "POST",
+          payload: {
+            tempStudentId,
+            halaqaId,
+            fullName,
+            displayName,
+            parentPhone,
+            gradeLevel,
+            memorizationStartedOn,
+            idempotencyKey,
+          },
+          teacherId,
+          halaqaId,
+        });
+
+        setNotice({
+          type: "success",
+          text: "تم حفظ الطالب محلياً (بانتظار المزامنة). ظهر في القائمة ويمكنك تسجيل تسميع له الآن.",
+        });
+        setShowAddModal(false);
+        onRefresh();
+      } catch {
+        setNotice({ type: "error", text: "تعذر حفظ مسودة الطالب محلياً." });
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     try {
       const response = await fetch("/api/teacher/students", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           halaqaId,
-          fullName: formData.get("fullName"),
-          displayName: formData.get("displayName"),
-          parentPhone: formData.get("parentPhone"),
-          gradeLevel: formData.get("gradeLevel"),
-          memorizationStartedOn: formData.get("memorizationStartedOn"),
+          fullName,
+          displayName,
+          parentPhone,
+          gradeLevel,
+          memorizationStartedOn,
         }),
       });
 
@@ -247,9 +328,16 @@ export function TeacherStudentsPanel({
                     <h3 className="text-base font-black text-[var(--text-main)]">{student.displayName}</h3>
                     <p className="text-xs font-bold text-[var(--text-muted)] mt-0.5">{student.fullName}</p>
                   </div>
-                  <span className="rounded-xl bg-[var(--card-soft)] border border-[var(--border-color)] px-2.5 py-1 text-[11px] font-black text-[var(--primary)] shrink-0">
-                    {student.stageName}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {student.isPendingSync || student.studentId.startsWith("temp_student") ? (
+                      <span className="rounded-xl border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                        ⏳ بانتظار المزامنة
+                      </span>
+                    ) : null}
+                    <span className="rounded-xl bg-[var(--card-soft)] border border-[var(--border-color)] px-2.5 py-1 text-[11px] font-black text-[var(--primary)] shrink-0">
+                      {student.stageName}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="mt-4 space-y-1.5 text-xs text-[var(--text-muted)] font-bold">

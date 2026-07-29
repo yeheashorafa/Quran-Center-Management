@@ -49,6 +49,8 @@ export type SessionStudentValue = {
   itemId: string | null;
   version: number | null;
   activities: SessionActivityValue[];
+  isPendingSync?: boolean;
+  tempId?: string;
 };
 
 export type TeacherSessionEditorData = {

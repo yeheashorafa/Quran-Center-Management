@@ -250,8 +250,27 @@ export function TeacherSessionPanel({
         }
         const data = payload as TeacherSessionEditorData;
         setEditor(data);
-        setStudents(data.students);
         setIsOfflineMode(false);
+
+        void getTeacherDataCache("teacher", halaqaId).then((cache) => {
+          const pendingOffline = cache?.students.filter((s) => s.isPendingSync || s.studentId.startsWith("temp_student")) || [];
+          const merged = [...data.students];
+          for (const pStu of pendingOffline) {
+            if (!merged.some((s) => s.studentId === pStu.studentId)) {
+              merged.push(pStu);
+            }
+          }
+          setStudents(merged);
+
+          // Cache merged data to IndexedDB for offline use
+          void saveTeacherDataCache(
+            "teacher",
+            halaqaId,
+            dashboard,
+            merged,
+            data,
+          );
+        });
 
         const nowStr =
           new Date().toLocaleTimeString("ar-EG", {
@@ -261,15 +280,6 @@ export function TeacherSessionPanel({
           " - " +
           new Date().toLocaleDateString("ar-EG");
         setLastCacheTime(nowStr);
-
-        // Cache online data to IndexedDB for offline use
-        void saveTeacherDataCache(
-          "teacher",
-          halaqaId,
-          dashboard,
-          data.students,
-          data,
-        );
         void saveOfflineTeacherProfile({
           teacherId: "teacher",
           halaqaId,
@@ -926,8 +936,13 @@ export function TeacherSessionPanel({
                                     : "⏳"}
                           </span>
                           <div>
-                            <h3 className="text-base font-black text-[var(--text-main)]">
-                              {student.displayName}
+                            <h3 className="text-base font-black text-[var(--text-main)] flex items-center gap-2">
+                              <span>{student.displayName}</span>
+                              {student.isPendingSync || student.studentId.startsWith("temp_student") ? (
+                                <span className="rounded-xl border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                                  ⏳ بانتظار المزامنة
+                                </span>
+                              ) : null}
                             </h3>
                             <p className="text-xs font-bold text-[var(--text-muted)]">
                               {student.attendance === "PRESENT"

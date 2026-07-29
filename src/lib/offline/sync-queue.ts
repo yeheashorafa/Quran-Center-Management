@@ -1,7 +1,8 @@
 "use client";
 
 import { idbDelete, idbGetAll, idbPut, STORES } from "./indexed-db";
-import { removeSessionDraft } from "./session-drafts";
+import { removeSessionDraft, replaceTempStudentIdInSessionDrafts } from "./session-drafts";
+import { replaceTempStudentIdInTeacherCache } from "./teacher-cache";
 
 export type SyncQueueItemStatus = "pending" | "syncing" | "synced" | "failed" | "conflict";
 
@@ -36,12 +37,23 @@ export type OfficialExamSyncPayload = {
   halaqaName?: string;
 };
 
+export type StudentCreateSyncPayload = {
+  tempStudentId: string;
+  halaqaId: string;
+  fullName: string;
+  displayName: string;
+  parentPhone?: string | null;
+  gradeLevel?: string | null;
+  memorizationStartedOn?: string | null;
+  idempotencyKey: string;
+};
+
 export type SyncQueueItem = {
   queueId: string;
-  type: "save_student" | "save_session" | "save_official_exam";
+  type: "save_student" | "save_session" | "save_official_exam" | "create_student";
   endpoint: string;
   method: "PUT" | "POST";
-  payload: SessionSyncPayload | OfficialExamSyncPayload;
+  payload: SessionSyncPayload | OfficialExamSyncPayload | StudentCreateSyncPayload;
   createdAt: number;
   updatedAt: number;
   status: SyncQueueItemStatus;
@@ -56,7 +68,7 @@ export async function enqueueSyncItem(
   item: Omit<SyncQueueItem, "queueId" | "createdAt" | "updatedAt" | "status" | "errorMessage">,
 ): Promise<string> {
   const prefix = item.type === "save_official_exam" ? item.examinerId || "examiner" : `${item.teacherId}_${item.halaqaId}`;
-  const dateKey = item.type === "save_official_exam" ? (item.payload as OfficialExamSyncPayload).examDate : item.sessionDate;
+  const dateKey = item.type === "save_official_exam" ? (item.payload as OfficialExamSyncPayload).examDate : (item.sessionDate || "draft");
   const queueId = `${prefix}_${dateKey}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
   const record: SyncQueueItem = {
@@ -182,15 +194,65 @@ export async function processSyncQueue(
     await idbPut(STORES.SYNC_QUEUE, item);
 
     try {
+      let bodyPayload: unknown = item.payload;
+      if (item.type === "create_student") {
+        const p = item.payload as StudentCreateSyncPayload;
+        bodyPayload = {
+          halaqaId: p.halaqaId,
+          fullName: p.fullName,
+          displayName: p.displayName,
+          parentPhone: p.parentPhone,
+          gradeLevel: p.gradeLevel,
+          memorizationStartedOn: p.memorizationStartedOn,
+        };
+      }
+
       const response = await fetch(item.endpoint, {
         method: item.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(item.payload),
+        headers: {
+          "Content-Type": "application/json",
+          ...(item.type === "create_student"
+            ? { "X-Idempotency-Key": (item.payload as StudentCreateSyncPayload).idempotencyKey }
+            : {}),
+        },
+        body: JSON.stringify(bodyPayload),
       });
 
       const json = await response.json().catch(() => ({}));
 
       if (response.ok) {
+        if (item.type === "create_student" && json.student?.id) {
+          const p = item.payload as StudentCreateSyncPayload;
+          const realStudentId = json.student.id as string;
+
+          if (item.teacherId && item.halaqaId) {
+            await replaceTempStudentIdInTeacherCache(
+              item.teacherId,
+              item.halaqaId,
+              p.tempStudentId,
+              realStudentId,
+            );
+          }
+          await replaceTempStudentIdInSessionDrafts(p.tempStudentId, realStudentId);
+
+          const allItems = await getAllSyncItems();
+          for (const qItem of allItems) {
+            if (qItem.type === "save_session") {
+              const sPayload = qItem.payload as SessionSyncPayload;
+              let modified = false;
+              for (const sEntry of sPayload.items) {
+                if (sEntry.studentId === p.tempStudentId) {
+                  sEntry.studentId = realStudentId;
+                  modified = true;
+                }
+              }
+              if (modified) {
+                await idbPut(STORES.SYNC_QUEUE, qItem);
+              }
+            }
+          }
+        }
+
         item.status = "synced";
         item.updatedAt = Date.now();
         await idbDelete(STORES.SYNC_QUEUE, item.queueId);
@@ -207,7 +269,9 @@ export async function processSyncQueue(
         break; // Stop syncing until user re-logs in
       } else if (response.status === 409) {
         item.status = "conflict";
-        item.errorMessage = item.type === "save_official_exam"
+        item.errorMessage = item.type === "create_student"
+          ? "يوجد تعارض في إضافة الطالب على الخادم (409). لم تُحذف مسودة الطالب المحلية."
+          : item.type === "save_official_exam"
           ? "تم تسجيل اختبار على الخادم لنفس الطالب والتاريخ من جهاز آخر (تعارض 409). لم تُحذف البيانات المحفوظة محلياً."
           : "يوجد تعديل أحدث على هذه الجلسة من جهاز آخر (تعارض 409). راجع الجلسة قبل المزامنة.";
         item.updatedAt = Date.now();
