@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { MonthlyReportData } from "@/lib/reports/types";
+import { getReportLogoBase64 } from "@/lib/reports/report-logo";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -139,6 +140,8 @@ export function renderMonthlyReportHtml(report: MonthlyReportData): string {
     timeZone: "Asia/Hebron",
   }).format(new Date(report.generatedAt));
 
+  const logoSrc = getReportLogoBase64() || "/brand/logo.png";
+
   return `<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
@@ -176,7 +179,7 @@ tbody tr:nth-child(even) td { background: #fbfdfb; }
 <body>
 <header class="report-header">
   <div style="display: flex; align-items: center; gap: 12px;">
-    <img src="/brand/logo.png" alt="شعار المركز" style="height: 50px; width: auto; object-fit: contain;" />
+    <img src="${logoSrc}" alt="شعار المركز" style="height: 50px; width: auto; object-fit: contain;" onerror="this.style.display='none';" />
     <div>
       <h1>${escapeHtml(report.title)}</h1>
       <p>${escapeHtml(report.monthLabel)} — ${escapeHtml(report.scopeLabel)}</p>

@@ -41,6 +41,10 @@ export function ParentReportModal({
             <button
               type="button"
               onClick={() => {
+                if (typeof navigator !== "undefined" && !navigator.onLine) {
+                  alert("تنزيل ملف PDF من الخادم يتطلب الاتصال بالإنترنت. يمكنك اختيار زر الطباعة (🖨️) للطباعة أو الحفظ كـ PDF أوفلاين.");
+                  return;
+                }
                 window.open(
                   `/api/reports/parent?studentId=${data.student.id}&month=${data.monthLabel}&format=pdf`,
                   "_blank",

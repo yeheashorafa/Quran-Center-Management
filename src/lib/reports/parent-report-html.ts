@@ -1,6 +1,9 @@
 import type { ParentReportData } from "@/lib/reports/parent-report-types";
+import { getReportLogoBase64 } from "@/lib/reports/report-logo";
 
 export function generateParentReportHtml(data: ParentReportData): string {
+  const logoSrc = getReportLogoBase64() || "/brand/logo.png";
+
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -105,7 +108,7 @@ export function generateParentReportHtml(data: ParentReportData): string {
 <body>
   <div class="container">
     <div class="header">
-      <img src="/brand/logo.png" alt="شعار المركز" class="logo" />
+      <img src="${logoSrc}" alt="شعار المركز" class="logo" onerror="this.style.display='none';" />
       <div class="center-name">${data.centerName}</div>
       <div class="title">📜 تقرير متابعة الطالب الشهري</div>
       <div class="subtitle">تاريخ الاستخراج: ${data.generatedAt}</div>

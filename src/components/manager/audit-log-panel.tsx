@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import type { AuditLogPage } from "@/lib/audit-logs/types";
+import { safeApiFetch } from "@/lib/offline/safe-fetch";
 
 function dateDaysAgo(days: number): string {
   const date = new Date();
@@ -53,18 +54,15 @@ export function AuditLogPanel() {
       if (from) params.set("from", from);
       if (to) params.set("to", to);
 
-      const response = await fetch(`/api/manager/audit-logs?${params.toString()}`, {
-        headers: { Accept: "application/json" },
-      });
-      const payload = (await response.json().catch(() => ({}))) as {
-        data?: AuditLogPage;
-        message?: string;
-      };
-      if (!response.ok || !payload.data) throw new Error(payload.message || "تعذر تحميل السجل.");
-      setData(payload.data);
+      const res = await safeApiFetch<AuditLogPage>(`/api/manager/audit-logs?${params.toString()}`);
+      if (!res.ok) {
+        setError(res.message);
+        return;
+      }
+      setData(res.data);
       setPage(requestedPage);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "تعذر تحميل السجل.");
+    } catch {
+      setError("تعذر الاتصال بالخادم. يرجى التأكد من الشبكة.");
     } finally {
       setLoading(false);
     }

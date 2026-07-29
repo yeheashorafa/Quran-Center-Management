@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import type { ManagerAlertsData, ManagerAlertSeverity } from "@/lib/manager-alerts/types";
+import { safeApiFetch } from "@/lib/offline/safe-fetch";
 
 const SEVERITY_LABELS: Record<ManagerAlertSeverity, string> = {
   CRITICAL: "عاجل",
@@ -15,11 +16,17 @@ const SEVERITY_STYLES: Record<ManagerAlertSeverity, string> = {
   INFO: "border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--status-info-text)]",
 };
 
-export function ManagerAlertsPanel({ initialDate }: { initialDate: string }) {
-  const [date, setDate] = useState(initialDate);
+export function ManagerAlertsPanel({
+  initialDate,
+  initialData,
+}: {
+  initialDate?: string;
+  initialData?: ManagerAlertsData;
+}) {
+  const [data, setData] = useState<ManagerAlertsData | null>(initialData ?? null);
+  const [date, setDate] = useState(() => initialDate || new Date().toISOString().slice(0, 10));
   const [lookbackDays, setLookbackDays] = useState(7);
-  const [data, setData] = useState<ManagerAlertsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function load(event?: FormEvent<HTMLFormElement>) {
@@ -28,12 +35,16 @@ export function ManagerAlertsPanel({ initialDate }: { initialDate: string }) {
     setError(null);
     try {
       const params = new URLSearchParams({ date, lookbackDays: String(lookbackDays) });
-      const response = await fetch(`/api/manager/alerts?${params.toString()}`);
-      const payload = (await response.json().catch(() => ({}))) as { data?: ManagerAlertsData; message?: string };
-      if (!response.ok || !payload.data) throw new Error(payload.message || "تعذر تحميل التنبيهات.");
-      setData(payload.data);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "تعذر تحميل التنبيهات.");
+      const res = await safeApiFetch<{ data?: ManagerAlertsData }>(`/api/manager/alerts?${params.toString()}`);
+      if (!res.ok) {
+        setError(res.message);
+        return;
+      }
+      if (res.data.data) {
+        setData(res.data.data);
+      }
+    } catch {
+      setError("تعذر الاتصال بالخادم لتحميل التنبيهات.");
     } finally {
       setLoading(false);
     }

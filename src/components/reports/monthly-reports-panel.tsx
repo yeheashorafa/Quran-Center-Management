@@ -6,6 +6,9 @@ import type {
   ReportFormat,
   ReportKind,
 } from "@/lib/reports/types";
+import { downloadCsvFile, escapeCsvCell } from "@/lib/reports/client-export-utils";
+import { getManagerDataCache } from "@/lib/offline/manager-cache";
+import { getExaminerDataCache } from "@/lib/offline/examiner-cache";
 
 type ApiMessage = { message?: string };
 
@@ -62,17 +65,71 @@ export function MonthlyReportsPanel({
   }, [options.stages, examStageId]);
 
   async function downloadReport(kind: ReportKind, format: ReportFormat) {
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      setNotice({ type: "error", text: "التقارير والتصدير تحتاج اتصالاً بالإنترنت." });
-      return;
-    }
-
     const month = kind === "COMPREHENSIVE" ? achieveMonth : examMonth;
     const stageId = kind === "COMPREHENSIVE" ? achieveStageId : examStageId;
     const halaqaId = kind === "COMPREHENSIVE" ? achieveHalaqaId : examHalaqaId;
 
     if (!month) {
       setNotice({ type: "error", text: "اختر الشهر أولاً." });
+      return;
+    }
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      if (format === "csv") {
+        setBusy({ kind, format });
+        try {
+          if (kind === "EXAMS") {
+            const exCache = await getExaminerDataCache();
+            const mCache = await getManagerDataCache();
+            const exams = exCache?.exams || mCache?.officialExams || [];
+            let csv = "اسم الطالب,تاريخ الاختبار,المرحلة,الحلقة,الدرجة,النتيجة,الملاحظات\n";
+            exams.forEach((item) => {
+              csv += [
+                escapeCsvCell(item.student.displayName),
+                escapeCsvCell(item.examDate),
+                escapeCsvCell(item.enrollment?.stageName || "—"),
+                escapeCsvCell(item.enrollment?.halaqaName || "—"),
+                escapeCsvCell(item.score ?? "—"),
+                escapeCsvCell(item.resultLabel || "—"),
+                escapeCsvCell(item.notes || "—"),
+              ].join(",") + "\n";
+            });
+            const cachedTime = exCache?.cachedAt || mCache?.cachedAt;
+            const dateStr = cachedTime ? new Date(cachedTime).toLocaleDateString("ar-EG") : "";
+            downloadCsvFile(`تقرير_الاختبارات_أوفلاين_${month}.csv`, csv);
+            setNotice({ type: "success", text: `تم تصدير ملف CSV أوفلاين بناءً على آخر تحديث محفوظ (${dateStr || "محلي"}).` });
+            return;
+          } else {
+            const mCache = await getManagerDataCache();
+            const students = mCache?.data.students || [];
+            let csv = "اسم الطالب,الاسم الكامل,الحلقة,المرحلة,رقم ولي الأمر,الحالة\n";
+            students.forEach((s) => {
+              csv += [
+                escapeCsvCell(s.displayName),
+                escapeCsvCell(s.fullName),
+                escapeCsvCell(s.activeEnrollment?.halaqa.nameAr || "—"),
+                escapeCsvCell(s.activeEnrollment?.halaqa.stageName || "—"),
+                escapeCsvCell(s.parentPhone || "غير مسجل"),
+                escapeCsvCell(s.isActive ? "نشط" : "غير نشط"),
+              ].join(",") + "\n";
+            });
+            const dateStr = mCache?.cachedAt ? new Date(mCache.cachedAt).toLocaleDateString("ar-EG") : "";
+            downloadCsvFile(`تقرير_الإنجاز_أوفلاين_${month}.csv`, csv);
+            setNotice({ type: "success", text: `تم تصدير ملف CSV أوفلاين بناءً على آخر تحديث محفوظ (${dateStr || "محلي"}).` });
+            return;
+          }
+        } catch {
+          setNotice({ type: "error", text: "تعذر توليد التقرير أوفلاين من الكاش المحتفظ به." });
+          return;
+        } finally {
+          setBusy(null);
+        }
+      }
+
+      setNotice({
+        type: "error",
+        text: "تصدير PDF و Excel يستلزم الاتصال بالإنترنت. يرجى التبديل لـ CSV للتصدير أوفلاين من الكاش.",
+      });
       return;
     }
 
@@ -115,7 +172,7 @@ export function MonthlyReportsPanel({
     } catch (error) {
       setNotice({
         type: "error",
-        text: error instanceof Error ? error.message : "تعذر إنشاء التقرير.",
+        text: error instanceof Error ? error.message : "تعذر الاتصال بالسيرفر لإنشاء التقرير.",
       });
     } finally {
       setBusy(null);

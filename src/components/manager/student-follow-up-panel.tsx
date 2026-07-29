@@ -8,6 +8,7 @@ import type {
   FollowUpSeverity,
   StudentFollowUpData,
 } from "@/lib/student-follow-up/types";
+import { safeApiFetch } from "@/lib/offline/safe-fetch";
 
 const SEVERITY_STYLES: Record<FollowUpSeverity, string> = {
   HIGH: "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]",
@@ -67,15 +68,16 @@ export function StudentFollowUpPanel({
       });
       if (stageId) params.set("stageId", stageId);
       if (halaqaId) params.set("halaqaId", halaqaId);
-      const response = await fetch(`/api/manager/follow-up?${params.toString()}`);
-      const payload = (await response.json().catch(() => ({}))) as {
-        data?: StudentFollowUpData;
-        message?: string;
-      };
-      if (!response.ok || !payload.data) throw new Error(payload.message || "تعذر تحميل قائمة المتابعة.");
-      setData(payload.data);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "تعذر تحميل قائمة المتابعة.");
+      const res = await safeApiFetch<{ data?: StudentFollowUpData }>(`/api/manager/follow-up?${params.toString()}`);
+      if (!res.ok) {
+        setError(res.message);
+        return;
+      }
+      if (res.data.data) {
+        setData(res.data.data);
+      }
+    } catch {
+      setError("تعذر الاتصال بالخادم لتحميل قائمة المتابعة.");
     } finally {
       setLoading(false);
     }

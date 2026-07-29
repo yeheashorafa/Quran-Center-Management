@@ -78,7 +78,8 @@ export function TeacherStudentsPanel({
       setShowAddModal(false);
       onRefresh();
     } catch (err) {
-      setNotice({ type: "error", text: err instanceof Error ? err.message : "حدث خطأ أثناء الإضافة." });
+      const text = err instanceof Error && !err.message.toLowerCase().includes("fetch") ? err.message : "تعذر الاتصال بالسيرفر. يرجى التأكد من الاتصال بالإنترنت.";
+      setNotice({ type: "error", text });
     } finally {
       setBusy(false);
     }
@@ -122,7 +123,8 @@ export function TeacherStudentsPanel({
       setEditingStudent(null);
       onRefresh();
     } catch (err) {
-      setNotice({ type: "error", text: err instanceof Error ? err.message : "حدث خطأ أثناء التحديث." });
+      const text = err instanceof Error && !err.message.toLowerCase().includes("fetch") ? err.message : "تعذر الاتصال بالسيرفر. يرجى التأكد من الاتصال بالإنترنت.";
+      setNotice({ type: "error", text });
     } finally {
       setBusy(false);
     }
@@ -154,7 +156,8 @@ export function TeacherStudentsPanel({
       setNotice({ type: "success", text: json.message || "تمت إزالة الطالب من الحلقة بنجاح." });
       onRefresh();
     } catch (err) {
-      setNotice({ type: "error", text: err instanceof Error ? err.message : "حدث خطأ أثناء الإزالة." });
+      const text = err instanceof Error && !err.message.toLowerCase().includes("fetch") ? err.message : "تعذر الاتصال بالسيرفر. يرجى التأكد من الاتصال بالإنترنت.";
+      setNotice({ type: "error", text });
     } finally {
       setBusy(false);
     }
@@ -173,7 +176,8 @@ export function TeacherStudentsPanel({
       if (!response.ok) throw new Error(json.message || "تعذر استخراج التقرير.");
       setActiveReport(json.data as ParentReportData);
     } catch (err) {
-      setNotice({ type: "error", text: err instanceof Error ? err.message : "حدث خطأ أثناء تحميل التقرير." });
+      const text = err instanceof Error && !err.message.toLowerCase().includes("fetch") ? err.message : "تعذر الاتصال بالسيرفر. يرجى التأكد من الاتصال بالإنترنت.";
+      setNotice({ type: "error", text });
     } finally {
       setFetchingReportId(null);
     }
