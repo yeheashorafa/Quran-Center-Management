@@ -171,6 +171,18 @@ export async function clearFailedSyncItems(): Promise<void> {
   }
 }
 
+export async function retryFailedSyncItems(): Promise<void> {
+  const items = await getAllSyncItems();
+  for (const item of items) {
+    if (item.status === "failed" || item.status === "conflict") {
+      item.status = "pending";
+      item.errorMessage = null;
+      item.updatedAt = Date.now();
+      await idbPut(STORES.SYNC_QUEUE, item);
+    }
+  }
+}
+
 export async function clearAllSyncItems(): Promise<void> {
   const items = await getAllSyncItems();
   for (const item of items) {

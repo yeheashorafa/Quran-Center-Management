@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   clearAllSyncItems,
   clearFailedSyncItems,
+  retryFailedSyncItems,
   deleteSyncItem,
   processSyncQueue,
   type SyncQueueItem,
@@ -78,6 +79,12 @@ export function PendingSessionsList({
     onRefresh?.();
   }
 
+  async function handleRetryFailed() {
+    await retryFailedSyncItems();
+    onRefresh?.();
+    void handleManualSync();
+  }
+
   async function handleClearAll() {
     await clearAllSyncItems();
     setShowClearModal(false);
@@ -87,6 +94,8 @@ export function PendingSessionsList({
   if (items.length === 0) {
     return null;
   }
+
+  const hasFailedOrConflict = items.some((i) => i.status === "failed" || i.status === "conflict");
 
   return (
     <section
@@ -103,7 +112,7 @@ export function PendingSessionsList({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             disabled={syncing || isOffline}
@@ -113,12 +122,23 @@ export function PendingSessionsList({
             {syncing ? "جاري المزامنة..." : "🔄 مزامنة الآن"}
           </button>
 
+          {hasFailedOrConflict ? (
+            <button
+              type="button"
+              disabled={syncing || isOffline}
+              onClick={() => void handleRetryFailed()}
+              className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-black text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+            >
+              🔁 إعادة المحاولة
+            </button>
+          ) : null}
+
           <button
             type="button"
             onClick={() => setShowClearModal(true)}
             className="rounded-2xl border border-[var(--status-danger-border)] bg-[var(--card-bg)] px-4 py-2 text-xs font-black text-[var(--status-danger-text)] transition hover:bg-[var(--status-danger-bg)]"
           >
-            🗑️ مسح العمليات المعلقة
+            🗑️ مسح العمليات
           </button>
         </div>
       </div>
@@ -180,7 +200,23 @@ export function PendingSessionsList({
               ? "اعتماد جلسة كاملة"
               : item.type === "save_official_exam"
                 ? "تسجيل اختبار رسمي"
-                : "حفظ طالب";
+                : item.type === "create_student"
+                  ? "إضافة طالب جديد"
+                  : item.type === "create_user"
+                    ? "إضافة مسودة مستخدم"
+                    : item.type === "create_halaqa"
+                      ? "إضافة مسودة حلقة"
+                      : "حفظ طالب";
+          const icon =
+            item.type === "save_session"
+              ? "📋"
+              : item.type === "save_official_exam"
+                ? "📝"
+                : item.type === "create_user"
+                  ? "👤"
+                  : item.type === "create_halaqa"
+                    ? "🕌"
+                    : "👨‍🎓";
           const formattedDate = new Date(item.createdAt).toLocaleTimeString("ar-EG", {
             hour: "2-digit",
             minute: "2-digit",
@@ -194,11 +230,7 @@ export function PendingSessionsList({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-3">
                   <span className="flex size-9 items-center justify-center rounded-xl bg-[var(--card-soft)] text-sm font-black text-[var(--primary)]">
-                    {item.type === "save_session"
-                      ? "📋"
-                      : item.type === "save_official_exam"
-                        ? "📝"
-                        : "👤"}
+                    {icon}
                   </span>
                   <div>
                     <h4 className="text-sm font-black text-[var(--text-main)]">

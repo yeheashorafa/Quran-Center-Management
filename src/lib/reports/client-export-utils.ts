@@ -26,11 +26,9 @@ export function printOfflineHtmlReport(title: string, contentHtml: string, cache
     return;
   }
 
-  const headerNotice = cachedAtStr
-    ? `<div style="background:#fef3c7; border:1px solid #f59e0b; color:#92400e; padding:10px; border-radius:8px; margin-bottom:15px; font-weight:bold; text-align:center; font-size:12px;">
-        ⚠️ هذه نسخة أوفلاين مبنية على آخر تحديث محفوظ بتاريخ: ${cachedAtStr}
-       </div>`
-    : "";
+  const headerNotice = `<div style="background:#fef3c7; border:1px solid #f59e0b; color:#92400e; padding:10px; border-radius:8px; margin-bottom:15px; font-weight:bold; text-align:center; font-size:12px;">
+    ⚠️ نسخة أوفلاين مبنية على آخر تحديث محفوظ${cachedAtStr ? ` بتاريخ: ${cachedAtStr}` : "."}
+   </div>`;
 
   printWindow.document.write(`
     <!DOCTYPE html>
