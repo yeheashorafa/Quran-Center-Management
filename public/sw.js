@@ -1,4 +1,4 @@
-const CACHE_NAME = "mutaqin-offline-shell-v13";
+const CACHE_NAME = "mutaqin-offline-shell-v14";
 const STATIC_ASSETS = [
   "/offline-shell.html",
   "/manifest.json",
@@ -193,6 +193,7 @@ self.addEventListener("install", (event) => {
       // Cache offline routes and their Next.js JS/CSS chunks dynamically
       await cachePageAndItsNextAssets(cache, "/offline-teacher");
       await cachePageAndItsNextAssets(cache, "/offline-examiner");
+      await cachePageAndItsNextAssets(cache, "/offline-manager");
       await cachePageAndItsNextAssets(cache, "/offline-login");
     })()
   );
@@ -324,6 +325,14 @@ self.addEventListener("fetch", (event) => {
             const fallback =
               (await cache.match("/offline-examiner")) ||
               (await cache.match("/examiner")) ||
+              (await cache.match("/offline-shell.html"));
+            if (fallback) return fallback;
+          }
+
+          // Dedicated offline manager route fallback
+          if (url.pathname.startsWith("/offline-manager")) {
+            const fallback =
+              (await cache.match("/offline-manager")) ||
               (await cache.match("/offline-shell.html"));
             if (fallback) return fallback;
           }

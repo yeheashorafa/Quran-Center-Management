@@ -135,6 +135,26 @@
     .btn-examiner:hover {
       background-color: var(--sky-hover);
     }
+    .btn-diag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.375rem;
+      margin-top: 1.25rem;
+      padding: 0.5rem 1rem;
+      border-radius: 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: var(--muted);
+      background-color: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: color 0.2s, background-color 0.2s;
+    }
+    .btn-diag:hover {
+      color: var(--text);
+      background-color: rgba(255, 255, 255, 0.1);
+    }
     .no-accounts {
       background-color: rgba(239, 68, 68, 0.1);
       border: 1px solid rgba(239, 68, 68, 0.25);
@@ -163,6 +183,102 @@
       color: #34d399;
       font-weight: 700;
     }
+    .version-tag {
+      display: inline-block;
+      margin-top: 0.5rem;
+      font-size: 0.6875rem;
+      color: var(--muted);
+      opacity: 0.8;
+      font-weight: 700;
+    }
+
+    /* Diagnostics Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background-color: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal-content {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 1.25rem;
+      padding: 1.5rem;
+      max-width: 440px;
+      width: 100%;
+      text-align: right;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-title {
+      font-size: 1rem;
+      font-weight: 900;
+      color: var(--text);
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.25rem;
+      cursor: pointer;
+      padding: 0.25rem;
+    }
+    .modal-close:hover {
+      color: var(--text);
+    }
+    .diag-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      font-size: 0.8125rem;
+    }
+    .diag-item {
+      background-color: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+    }
+    .diag-label {
+      font-weight: 800;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .diag-status {
+      font-size: 0.75rem;
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.375rem;
+      font-weight: 800;
+    }
+    .diag-status.yes {
+      background-color: var(--online-bg);
+      color: var(--online-text);
+      border: 1px solid var(--online-border);
+    }
+    .diag-status.no {
+      background-color: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .diag-detail {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 0.375rem;
+    }
   </style>
 </head>
 <body>
@@ -185,11 +301,11 @@
     <div class="divider"></div>
 
     <div id="loading" class="loading-state">
-      جاري قراءة الحسابات المحفوظة محلياً...
+      جاري قراءة الحسابات والبيانات المحفوظة محلياً...
     </div>
 
     <div id="accounts-container" style="display: none;">
-      <h2 class="accounts-title">🟢 الحسابات المحفوظة على هذا الجهاز:</h2>
+      <h2 class="accounts-title">🟢 البيانات المحفوظة على هذا الجهاز:</h2>
       <div class="btn-group" id="buttons-group">
         <!-- Dynamic buttons rendered here -->
       </div>
@@ -197,21 +313,69 @@
 
     <div id="no-accounts-container" style="display: none;">
       <div class="no-accounts">
-        ⚠️ لا توجد بيانات محفوظة لهذا الجهاز. افتح التطبيق مرة واحدة بالإنترنت وسجل الدخول أولاً لتفعيل التخزين المحلي.
+        ⚠️ لا توجد بيانات محفوظة على هذا الجهاز.<br>
+        افتح لوحة المحفظ أو المختبر أو المدير مرة واحدة أثناء الاتصال بالإنترنت حتى يتم حفظ نسخة للعمل بدون إنترنت.
       </div>
     </div>
 
+    <button id="btn-diagnostics" type="button" class="btn-diag">
+      🔍 فحص البيانات المحفوظة
+    </button>
+
     <div class="footer">
       🤍 صدقة جارية عن روح الشهداء بإذن الله<br>
-      <span class="footer-names">أبو فايز الشرفا · أبو أنس الشرفا · أبو المعتصم الزرد</span>
+      <span class="footer-names">أبو فايز الشرفا · أبو أنس الشرفا · أبو المعتصم الزرد</span><br>
+      <span class="version-tag">Offline Shell v14</span>
+    </div>
+  </div>
+
+  <!-- Diagnostics Modal -->
+  <div id="diag-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">🔍 حالة البيانات المحفوظة محلياً</h3>
+        <button id="modal-close-btn" class="modal-close" type="button">✕</button>
+      </div>
+      <ul class="diag-list">
+        <li class="diag-item">
+          <div class="diag-label">
+            <span>📖 بيانات المحفظ (الشيخ)</span>
+            <span id="diag-teacher-status" class="diag-status no">جاري الفحص...</span>
+          </div>
+          <div id="diag-teacher-time" class="diag-detail">آخر تحديث: غير محدد</div>
+        </li>
+        <li class="diag-item">
+          <div class="diag-label">
+            <span>📝 بيانات المختبر (الاختبارات)</span>
+            <span id="diag-examiner-status" class="diag-status no">جاري الفحص...</span>
+          </div>
+          <div id="diag-examiner-time" class="diag-detail">آخر تحديث: غير محدد</div>
+        </li>
+        <li class="diag-item">
+          <div class="diag-label">
+            <span>📊 نسخة المدير (Snapshot)</span>
+            <span id="diag-manager-status" class="diag-status no">جاري الفحص...</span>
+          </div>
+          <div id="diag-manager-time" class="diag-detail">آخر تحديث: غير محدد</div>
+        </li>
+        <li class="diag-item">
+          <div class="diag-label">
+            <span>⚙️ الخدمة والذاكرة المحلية</span>
+            <span id="diag-sw-status" class="diag-status yes">Offline Shell v14</span>
+          </div>
+          <div id="diag-db-detail" class="diag-detail">قاعدة البيانات: جاري الفحص...</div>
+        </li>
+      </ul>
     </div>
   </div>
 
   <script>
     (function () {
       const DB_NAME = "qcm_offline_db";
-      const DB_VERSION = 3;
       const STORE_PROFILE = "offline_user_profile";
+      const STORE_TEACHER_CACHE = "teacher_cache";
+      const STORE_EXAMINER_CACHE = "examiner_cache";
+      const STORE_MANAGER_CACHE = "manager_cache";
 
       const badgeEl = document.getElementById("status-badge");
       const badgeIconEl = document.getElementById("badge-icon");
@@ -221,6 +385,23 @@
       const accountsEl = document.getElementById("accounts-container");
       const buttonsEl = document.getElementById("buttons-group");
       const noAccountsEl = document.getElementById("no-accounts-container");
+
+      const diagBtn = document.getElementById("btn-diagnostics");
+      const diagModal = document.getElementById("diag-modal");
+      const modalCloseBtn = document.getElementById("modal-close-btn");
+
+      let diagState = {
+        teacherFound: false,
+        teacherName: null,
+        teacherTime: null,
+        examinerFound: false,
+        examinerName: null,
+        examinerTime: null,
+        managerFound: false,
+        managerTime: null,
+        dbVersion: null,
+        stores: []
+      };
 
       function updateNetworkStatus() {
         if (navigator.onLine) {
@@ -240,125 +421,213 @@
       window.addEventListener("offline", updateNetworkStatus);
       updateNetworkStatus();
 
+      // Diagnostics Modal Logic
+      diagBtn.onclick = function() {
+        renderDiagnosticsUI();
+        diagModal.style.display = "flex";
+      };
+      modalCloseBtn.onclick = function() {
+        diagModal.style.display = "none";
+      };
+      diagModal.onclick = function(e) {
+        if (e.target === diagModal) diagModal.style.display = "none";
+      };
+
+      function formatTime(ts) {
+        if (!ts) return "غير محدد";
+        try {
+          const d = new Date(ts);
+          return d.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }) + " - " + d.toLocaleDateString("ar-EG");
+        } catch {
+          return "غير محدد";
+        }
+      }
+
+      function renderDiagnosticsUI() {
+        const tStatus = document.getElementById("diag-teacher-status");
+        const tTime = document.getElementById("diag-teacher-time");
+        const eStatus = document.getElementById("diag-examiner-status");
+        const eTime = document.getElementById("diag-examiner-time");
+        const mStatus = document.getElementById("diag-manager-status");
+        const mTime = document.getElementById("diag-manager-time");
+        const dbDetail = document.getElementById("diag-db-detail");
+
+        if (diagState.teacherFound) {
+          tStatus.className = "diag-status yes";
+          tStatus.textContent = "محفوظ (" + (diagState.teacherName || "الشيخ") + ")";
+          tTime.textContent = "آخر تحديث: " + formatTime(diagState.teacherTime);
+        } else {
+          tStatus.className = "diag-status no";
+          tStatus.textContent = "غير محفوظ";
+          tTime.textContent = "آخر تحديث: لا يوجد كاش";
+        }
+
+        if (diagState.examinerFound) {
+          eStatus.className = "diag-status yes";
+          eStatus.textContent = "محفوظ (" + (diagState.examinerName || "المختبر") + ")";
+          eTime.textContent = "آخر تحديث: " + formatTime(diagState.examinerTime);
+        } else {
+          eStatus.className = "diag-status no";
+          eStatus.textContent = "غير محفوظ";
+          eTime.textContent = "آخر تحديث: لا يوجد كاش";
+        }
+
+        if (diagState.managerFound) {
+          mStatus.className = "diag-status yes";
+          mStatus.textContent = "محفوظة (Read-Only)";
+          mTime.textContent = "آخر تحديث: " + formatTime(diagState.managerTime);
+        } else {
+          mStatus.className = "diag-status no";
+          mStatus.textContent = "غير محفوظة";
+          mTime.textContent = "آخر تحديث: لا يوجد كاش";
+        }
+
+        dbDetail.textContent = "قاعدة البيانات: " + DB_NAME + " (الإصدار: " + (diagState.dbVersion || "غير معروف") + ")";
+      }
+
       if (!("indexedDB" in window)) {
+        console.warn("[offline-shell] IndexedDB is not supported in this browser.");
         loadingEl.style.display = "none";
         noAccountsEl.style.display = "block";
         return;
       }
 
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      // Open IndexedDB safely without hardcoded version number
+      const req = indexedDB.open(DB_NAME);
 
-      req.onerror = function () {
+      req.onerror = function (err) {
+        console.error("[offline-shell] Failed to open IndexedDB:", err);
         loadingEl.style.display = "none";
         noAccountsEl.style.display = "block";
       };
 
       req.onsuccess = function (event) {
         const db = event.target.result;
-        const stores = [];
+        diagState.dbVersion = db.version;
+        diagState.stores = Array.from(db.objectStoreNames);
 
-        if (db.objectStoreNames.contains(STORE_PROFILE)) stores.push(STORE_PROFILE);
-        if (db.objectStoreNames.contains("teacher_cache")) stores.push("teacher_cache");
-        if (db.objectStoreNames.contains("examiner_cache")) stores.push("examiner_cache");
-        if (db.objectStoreNames.contains("manager_cache")) stores.push("manager_cache");
+        console.log("[offline-shell] DB opened successfully. Version:", db.version);
+        console.log("[offline-shell] stores found:", diagState.stores);
 
-        if (stores.length === 0) {
+        const storesToRead = [];
+        if (db.objectStoreNames.contains(STORE_PROFILE)) storesToRead.push(STORE_PROFILE);
+        if (db.objectStoreNames.contains(STORE_TEACHER_CACHE)) storesToRead.push(STORE_TEACHER_CACHE);
+        if (db.objectStoreNames.contains(STORE_EXAMINER_CACHE)) storesToRead.push(STORE_EXAMINER_CACHE);
+        if (db.objectStoreNames.contains(STORE_MANAGER_CACHE)) storesToRead.push(STORE_MANAGER_CACHE);
+
+        if (storesToRead.length === 0) {
+          console.log("[offline-shell] No target object stores found in IndexedDB.");
           loadingEl.style.display = "none";
           noAccountsEl.style.display = "block";
           return;
         }
 
-        const tx = db.transaction(stores, "readonly");
-        let teacherName = null;
-        let examinerName = null;
-        let hasManagerCache = false;
+        const tx = db.transaction(storesToRead, "readonly");
 
-        if (stores.includes(STORE_PROFILE)) {
+        if (storesToRead.includes(STORE_PROFILE)) {
           const profileStore = tx.objectStore(STORE_PROFILE);
+
           const reqTeacher = profileStore.get("TEACHER");
           reqTeacher.onsuccess = function () {
             if (reqTeacher.result && reqTeacher.result.role === "TEACHER") {
-              teacherName = reqTeacher.result.teacherName || "الشيخ";
+              diagState.teacherFound = true;
+              diagState.teacherName = reqTeacher.result.teacherName || "الشيخ";
+              diagState.teacherTime = reqTeacher.result.cachedAt;
             }
           };
 
           const reqExaminer = profileStore.get("EXAMINER");
           reqExaminer.onsuccess = function () {
             if (reqExaminer.result && reqExaminer.result.role === "EXAMINER") {
-              examinerName = reqExaminer.result.examinerName || "المختبر";
+              diagState.examinerFound = true;
+              diagState.examinerName = reqExaminer.result.examinerName || "المختبر";
+              diagState.examinerTime = reqExaminer.result.cachedAt;
             }
           };
         }
 
-        if (stores.includes("teacher_cache")) {
-          const tStore = tx.objectStore("teacher_cache");
+        if (storesToRead.includes(STORE_TEACHER_CACHE)) {
+          const tStore = tx.objectStore(STORE_TEACHER_CACHE);
           const reqAllT = tStore.getAll();
           reqAllT.onsuccess = function () {
-            if (!teacherName && reqAllT.result && reqAllT.result.length > 0) {
+            if (reqAllT.result && reqAllT.result.length > 0) {
               const rec = reqAllT.result[0];
-              teacherName = rec.dashboard?.teacherName || rec.teacherName || "الشيخ";
+              diagState.teacherFound = true;
+              if (!diagState.teacherName) {
+                diagState.teacherName = rec.dashboard?.teacherName || rec.teacherName || "الشيخ";
+              }
+              if (!diagState.teacherTime) {
+                diagState.teacherTime = rec.cachedAt;
+              }
             }
           };
         }
 
-        if (stores.includes("examiner_cache")) {
-          const eStore = tx.objectStore("examiner_cache");
+        if (storesToRead.includes(STORE_EXAMINER_CACHE)) {
+          const eStore = tx.objectStore(STORE_EXAMINER_CACHE);
           const reqAllE = eStore.getAll();
           reqAllE.onsuccess = function () {
-            if (!examinerName && reqAllE.result && reqAllE.result.length > 0) {
+            if (reqAllE.result && reqAllE.result.length > 0) {
               const rec = reqAllE.result[0];
-              examinerName = rec.options?.examinerName || rec.examinerName || "المختبر";
+              diagState.examinerFound = true;
+              if (!diagState.examinerName) {
+                diagState.examinerName = rec.options?.examinerName || rec.examinerName || "المختبر";
+              }
+              if (!diagState.examinerTime) {
+                diagState.examinerTime = rec.cachedAt;
+              }
             }
           };
         }
 
-        if (stores.includes("manager_cache")) {
-          const mStore = tx.objectStore("manager_cache");
+        if (storesToRead.includes(STORE_MANAGER_CACHE)) {
+          const mStore = tx.objectStore(STORE_MANAGER_CACHE);
           const reqAllM = mStore.getAll();
           reqAllM.onsuccess = function () {
             if (reqAllM.result && reqAllM.result.length > 0) {
-              hasManagerCache = true;
+              const rec = reqAllM.result[0];
+              diagState.managerFound = true;
+              diagState.managerTime = rec.cachedAt;
             }
           };
         }
 
         tx.oncomplete = function () {
-          loadingEl.style.display = "none";
+          console.log("[offline-shell] teacher profile found:", diagState.teacherFound ? "yes" : "no");
+          console.log("[offline-shell] examiner profile found:", diagState.examinerFound ? "yes" : "no");
+          console.log("[offline-shell] manager cache found:", diagState.managerFound ? "yes" : "no");
 
+          loadingEl.style.display = "none";
           let hasAccount = false;
           buttonsEl.innerHTML = "";
 
-          if (teacherName) {
+          if (diagState.teacherFound) {
             hasAccount = true;
             const btn = document.createElement("button");
             btn.className = "btn btn-teacher";
             btn.type = "button";
-            btn.innerHTML = "📖 الدخول أوفلاين كشيخ (" + teacherName + ")";
+            btn.innerHTML = "📖 الدخول أوفلاين كشيخ" + (diagState.teacherName ? " (" + diagState.teacherName + ")" : "");
             btn.onclick = function () {
-              try {
-                localStorage.setItem("offline_role", "TEACHER");
-              } catch (e) {}
+              try { localStorage.setItem("offline_role", "TEACHER"); } catch (e) {}
               window.location.href = "/offline-teacher";
             };
             buttonsEl.appendChild(btn);
           }
 
-          if (examinerName) {
+          if (diagState.examinerFound) {
             hasAccount = true;
             const btn = document.createElement("button");
             btn.className = "btn btn-examiner";
             btn.type = "button";
-            btn.innerHTML = "📝 الدخول أوفلاين كمختبر (" + examinerName + ")";
+            btn.innerHTML = "📝 الدخول أوفلاين كمختبر" + (diagState.examinerName ? " (" + diagState.examinerName + ")" : "");
             btn.onclick = function () {
-              try {
-                localStorage.setItem("offline_role", "EXAMINER");
-              } catch (e) {}
+              try { localStorage.setItem("offline_role", "EXAMINER"); } catch (e) {}
               window.location.href = "/offline-examiner";
             };
             buttonsEl.appendChild(btn);
           }
 
-          if (hasManagerCache) {
+          if (diagState.managerFound) {
             hasAccount = true;
             const btn = document.createElement("button");
             btn.className = "btn btn-online";
@@ -366,9 +635,7 @@
             btn.type = "button";
             btn.innerHTML = "📊 عرض آخر نسخة محفوظة للمدير (قراءة فقط)";
             btn.onclick = function () {
-              try {
-                localStorage.setItem("offline_role", "CENTER_MANAGER");
-              } catch (e) {}
+              try { localStorage.setItem("offline_role", "CENTER_MANAGER"); } catch (e) {}
               window.location.href = "/offline-manager";
             };
             buttonsEl.appendChild(btn);
@@ -379,6 +646,12 @@
           } else {
             noAccountsEl.style.display = "block";
           }
+        };
+
+        tx.onerror = function(txErr) {
+          console.error("[offline-shell] Transaction error while reading stores:", txErr);
+          loadingEl.style.display = "none";
+          noAccountsEl.style.display = "block";
         };
       };
     })();

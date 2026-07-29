@@ -51,7 +51,15 @@ export async function getTeacherDataCache(
 
   // Fallback: try default key or first matching teacher record
   const defaultCache = await idbGet<TeacherCacheRecord>(STORES.TEACHER_CACHE, `${teacherId}_default`);
-  return defaultCache;
+  if (defaultCache) return defaultCache;
+
+  try {
+    const { idbGetAll } = await import("./indexed-db");
+    const items = await idbGetAll<TeacherCacheRecord>(STORES.TEACHER_CACHE);
+    return items[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function clearTeacherDataCache(): Promise<void> {

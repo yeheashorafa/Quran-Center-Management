@@ -32,13 +32,21 @@ export async function saveExaminerDataCache(
 export async function getExaminerDataCache(
   examinerId?: string,
 ): Promise<ExaminerCacheRecord | null> {
-  const id = examinerId || "default";
-  const cache = await idbGet<ExaminerCacheRecord>(STORES.EXAMINER_CACHE, id);
-  if (cache) return cache;
+  if (examinerId) {
+    const cache = await idbGet<ExaminerCacheRecord>(STORES.EXAMINER_CACHE, examinerId);
+    if (cache) return cache;
+  }
 
-  // Fallback to first available cache if examinerId matches or generic
-  const allCaches = await idbGet<ExaminerCacheRecord>(STORES.EXAMINER_CACHE, "examiner");
-  return allCaches;
+  const genericCache = await idbGet<ExaminerCacheRecord>(STORES.EXAMINER_CACHE, "examiner");
+  if (genericCache) return genericCache;
+
+  try {
+    const { idbGetAll } = await import("./indexed-db");
+    const items = await idbGetAll<ExaminerCacheRecord>(STORES.EXAMINER_CACHE);
+    return items[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function clearExaminerDataCache(): Promise<void> {

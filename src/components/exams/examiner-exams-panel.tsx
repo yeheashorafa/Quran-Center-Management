@@ -141,13 +141,20 @@ export function ExaminerExamsPanel({
       if (active) setPendingSyncItems(examItems);
 
       if (typeof navigator !== "undefined" && navigator.onLine) {
+        const examinerName = initialExams[0]?.examiner?.displayName || "المختبر";
         await saveExaminerDataCache("examiner", initialOptions, initialExams);
         await saveOfflineExaminerProfile({
           examinerId: "examiner",
-          examinerName: "المختبر",
+          examinerName,
           cachedAt: Date.now(),
           lastOnlineLoginAt: Date.now(),
         });
+        if (active) {
+          setNotice({
+            type: "success",
+            text: "تم حفظ بيانات المختبر لهذا الجهاز للعمل بدون إنترنت.",
+          });
+        }
         const nowStr = new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }) + " - " + new Date().toLocaleDateString("ar-EG");
         if (active) setLastCacheTime(nowStr);
       } else {

@@ -88,7 +88,12 @@ export function ManagementPanel({
         monitoringData,
         officialExams,
         reportOptions,
-      );
+      ).then(() => {
+        setNotice({
+          type: "success",
+          text: "تم حفظ نسخة المدير لهذا الجهاز للعرض بدون إنترنت.",
+        });
+      });
     }
   }, [isOffline, data, monitoringData, officialExams, reportOptions]);
 

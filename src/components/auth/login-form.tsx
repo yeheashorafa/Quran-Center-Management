@@ -16,6 +16,7 @@ import {
   type OfflineExaminerProfile,
   type OfflineTeacherProfile,
 } from "@/lib/offline/offline-profile";
+import { getManagerDataCache } from "@/lib/offline/manager-cache";
 
 function LockIcon() {
   return (
@@ -104,9 +105,12 @@ export function LoginForm() {
   const role = useWatch({ control, name: "role" });
   const stageId = useWatch({ control, name: "stageId" });
 
+  const [hasManagerCache, setHasManagerCache] = useState(false);
+
   useEffect(() => {
     void getOfflineTeacherProfile().then(setTeacherProfile);
     void getOfflineExaminerProfile().then(setExaminerProfile);
+    void getManagerDataCache().then((cache) => setHasManagerCache(!!cache));
   }, []);
 
   useEffect(() => {
@@ -216,11 +220,13 @@ export function LoginForm() {
   }
 
   if (isClientOffline) {
+    const hasAnyCache = teacherProfile || examinerProfile || hasManagerCache;
+
     return (
       <div className="space-y-4 text-right">
         {isOfflineLogout ? (
           <div className="rounded-2xl border border-[var(--status-info-border)] bg-[var(--status-info-bg)] p-4 text-xs font-bold text-[var(--status-info-text)] shadow-xs leading-relaxed">
-            ℹ️ تم تسجيل الخروج محلياً. يمكنك الدخول أوفلاين كشيخ أو مختبر إذا كانت بياناتك محفوظة مسبقاً على هذا الجهاز.
+            ℹ️ تم تسجيل الخروج محلياً. يمكنك الدخول أوفلاين كشيخ أو مختبر أو عرض نسخة المدير إذا كانت بياناتك محفوظة مسبقاً على هذا الجهاز.
           </div>
         ) : null}
 
@@ -230,11 +236,11 @@ export function LoginForm() {
             <span>أنت غير متصل بالإنترنت</span>
           </div>
           <p className="opacity-90 leading-relaxed">
-            يمكنك الدخول أوفلاين للحسابات التي تم فتحها مسبقاً على هذا الجهاز فقط.
+            يمكنك الوصول للبيانات المحفوظة مسبقاً على هذا الجهاز فقط.
           </p>
         </div>
 
-        {teacherProfile || examinerProfile ? (
+        {hasAnyCache ? (
           <div className="space-y-3 pt-2">
             {teacherProfile ? (
               <button
@@ -261,10 +267,39 @@ export function LoginForm() {
                 📝 الدخول أوفلاين كمختبر ({examinerProfile.examinerName})
               </button>
             ) : null}
+
+            {hasManagerCache ? (
+              <button
+                type="button"
+                onClick={() => {
+                  try { localStorage.setItem("offline_role", "CENTER_MANAGER"); } catch {}
+                  window.location.href = "/offline-manager";
+                }}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-indigo-700 px-5 py-3 text-sm font-black text-white shadow-md transition hover:bg-indigo-800 active:scale-[0.99]"
+              >
+                📊 عرض آخر نسخة محفوظة للمدير (قراءة فقط)
+              </button>
+            ) : null}
+
+            <a
+              href="/offline-shell.html"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 py-2.5 text-xs font-black text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
+            >
+              🔍 فحص البيانات المحفوظة (Offline Shell)
+            </a>
           </div>
         ) : (
-          <div className="rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-4 text-xs font-extrabold text-[var(--status-danger-text)] shadow-xs leading-relaxed">
-            ⚠️ لا توجد بيانات محفوظة لهذا الجهاز. سجل الدخول مرة واحدة بالإنترنت أولاً.
+          <div className="rounded-2xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-4 text-xs font-extrabold text-[var(--status-danger-text)] shadow-xs leading-relaxed space-y-3">
+            <p>
+              ⚠️ لا توجد بيانات محفوظة على هذا الجهاز.<br />
+              افتح لوحة المحفظ أو المختبر أو المدير مرة واحدة أثناء الاتصال بالإنترنت حتى يتم حفظ نسخة للعمل بدون إنترنت.
+            </p>
+            <a
+              href="/offline-shell.html"
+              className="inline-block rounded-xl border border-[var(--status-danger-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-black text-[var(--text-main)]"
+            >
+              🔍 فحص الذاكرة المحفظة
+            </a>
           </div>
         )}
       </div>
@@ -273,12 +308,12 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
-      {/* Offline Shortcuts Banner for Teacher & Examiner */}
-      {teacherProfile || examinerProfile ? (
+      {/* Offline Shortcuts Banner for Teacher, Examiner & Manager */}
+      {teacherProfile || examinerProfile || hasManagerCache ? (
         <aside aria-label="اختصارات العمل أوفلاين" className="rounded-2xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] p-4 text-xs font-bold text-[var(--status-success-text)] shadow-xs">
           <div className="flex flex-col gap-2">
             <p className="font-black text-sm text-[var(--status-success-text)]">
-              🟢 الجلسات الآمنة المحفوظة محلياً على هذا الجهاز:
+              🟢 البيانات المحفوظة محلياً على هذا الجهاز للعمل بدون إنترنت:
             </p>
             <div className="flex flex-col gap-2 pt-1">
               {teacherProfile ? (
@@ -287,7 +322,7 @@ export function LoginForm() {
                   onClick={() => router.push("/offline-teacher")}
                   className="flex items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-xs font-black text-white shadow-xs hover:opacity-90 transition"
                 >
-                  📖 الدخول إلى وضع الشيخ ({teacherProfile.teacherName} — التسميع Offline)
+                  📖 الدخول أوفلاين كشيخ ({teacherProfile.teacherName})
                 </button>
               ) : null}
 
@@ -297,7 +332,17 @@ export function LoginForm() {
                   onClick={() => router.push("/offline-examiner")}
                   className="flex items-center justify-center gap-2 rounded-xl bg-[var(--primary-dark)] px-4 py-2.5 text-xs font-black text-white shadow-xs hover:opacity-90 transition"
                 >
-                  📝 الدخول إلى وضع المختبر ({examinerProfile.examinerName} — الاختبارات Offline)
+                  📝 الدخول أوفلاين كمختبر ({examinerProfile.examinerName})
+                </button>
+              ) : null}
+
+              {hasManagerCache ? (
+                <button
+                  type="button"
+                  onClick={() => router.push("/offline-manager")}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-indigo-700 px-4 py-2.5 text-xs font-black text-white shadow-xs hover:bg-indigo-800 transition"
+                >
+                  📊 عرض آخر نسخة محفوظة للمدير (قراءة فقط)
                 </button>
               ) : null}
             </div>

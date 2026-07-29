@@ -273,10 +273,15 @@ export function TeacherSessionPanel({
         void saveOfflineTeacherProfile({
           teacherId: "teacher",
           halaqaId,
-          teacherName: "الشيخ",
+          teacherName: dashboard?.teacherName || "الشيخ",
           halaqaName: data.halaqa.nameAr,
           cachedAt: Date.now(),
           lastOnlineLoginAt: Date.now(),
+        }).then(() => {
+          setNotice({
+            type: "success",
+            text: "تم حفظ بيانات المحفظ لهذا الجهاز للعمل بدون إنترنت.",
+          });
         });
 
         // Default first student expanded for mobile
@@ -590,6 +595,27 @@ export function TeacherSessionPanel({
           </div>
         </div>
       </section>
+
+      {/* Notice Banner */}
+      {notice ? (
+        <aside
+          aria-label="إشعار النظام"
+          className={`rounded-2xl border p-4 text-xs font-bold shadow-xs flex items-center justify-between gap-3 ${
+            notice.type === "success"
+              ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)]"
+              : "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)]"
+          }`}
+        >
+          <span>{notice.text}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="text-xs font-black opacity-70 hover:opacity-100"
+          >
+            ✕
+          </button>
+        </aside>
+      ) : null}
 
       {/* Offline Mode Last Cache Timestamp Banner (Requirement 5) */}
       {isOfflineMode || isClientOffline ? (
