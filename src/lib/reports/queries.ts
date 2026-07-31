@@ -307,10 +307,9 @@ export async function getMonthlyReportData(
       },
       enrollments: {
         where: {
+          status: "ACTIVE",
           deletedAt: null,
-          startedOn: { lte: range.endDate },
-          OR: [{ endedOn: null }, { endedOn: { gte: range.startDate } }],
-          student: { deletedAt: null },
+          student: { isActive: true, deletedAt: null },
         },
         select: {
           id: true,
@@ -356,7 +355,13 @@ export async function getMonthlyReportData(
         where: {
           examDate: { gte: range.startDate, lte: range.endDate },
           ...(filter.includeVoided ? {} : { status: "ACTIVE" }),
-          enrollment: { halaqaId: { in: halaqaIds } },
+          student: { isActive: true, deletedAt: null },
+          enrollment: {
+            halaqaId: { in: halaqaIds },
+            status: "ACTIVE",
+            deletedAt: null,
+            student: { isActive: true, deletedAt: null },
+          },
         },
         orderBy: [{ examDate: "asc" }, { createdAt: "asc" }],
         select: {
@@ -400,12 +405,16 @@ export async function getMonthlyReportData(
 
   const reportHalaqat: HalaqaMonthlyReport[] = halaqat.map((halaqa) => {
     const students = new Map<string, StudentMonthlyReportRow>();
+    const activeStudentIds = new Set<string>();
     for (const enrollment of halaqa.enrollments) {
-      if (!students.has(enrollment.student.id)) {
-        students.set(
-          enrollment.student.id,
-          initialStudentRow(enrollment.student.id, enrollment.student.displayName),
-        );
+      if (enrollment.student) {
+        activeStudentIds.add(enrollment.student.id);
+        if (!students.has(enrollment.student.id)) {
+          students.set(
+            enrollment.student.id,
+            initialStudentRow(enrollment.student.id, enrollment.student.displayName),
+          );
+        }
       }
     }
 
@@ -420,8 +429,11 @@ export async function getMonthlyReportData(
 
     for (const memorizationSession of halaqa.sessions) {
       for (const item of memorizationSession.items) {
-        const row = students.get(item.student.id) ?? initialStudentRow(item.student.id, item.student.displayName);
-        students.set(item.student.id, row);
+        if (!activeStudentIds.has(item.student.id)) {
+          continue;
+        }
+        const row = students.get(item.student.id);
+        if (!row) continue;
 
         if (item.attendance === "PRESENT") {
           present += 1;

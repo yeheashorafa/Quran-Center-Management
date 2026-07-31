@@ -26,10 +26,11 @@ export function DynamicLogo({
   priority = false,
 }: DynamicLogoProps) {
   const { resolvedTheme } = useTheme();
+
   const mounted = useSyncExternalStore(
     emptySubscribe,
     () => true,
-    () => false,
+    () => false
   );
 
   const isDark = mounted && resolvedTheme === "dark";
@@ -37,6 +38,7 @@ export function DynamicLogo({
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     const target = e.currentTarget;
+
     if (target.src.includes("logo-dark.png")) {
       target.src = "/brand/logo-light.png";
     } else if (target.src.includes("logo-light.png")) {
@@ -50,9 +52,10 @@ export function DynamicLogo({
         src={logoSrc}
         alt={alt}
         fill
-        sizes={sizes}
+        sizes={sizes || "128px"}
         className={className}
         priority={priority}
+        loading={priority ? "eager" : "lazy"}
         onError={handleImageError}
       />
     );
@@ -66,6 +69,7 @@ export function DynamicLogo({
       height={height || 64}
       className={className}
       priority={priority}
+      loading={priority ? "eager" : "lazy"}
       onError={handleImageError}
     />
   );

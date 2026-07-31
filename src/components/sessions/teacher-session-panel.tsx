@@ -7,6 +7,7 @@ import {
   SessionDetailModal,
   type SessionDetailData,
 } from "@/components/sessions/session-detail-modal";
+import { SectionHint } from "@/components/shared/section-hint";
 import { TeacherStudentsPanel } from "@/components/teacher/teacher-students-panel";
 import {
   SurahActivityEditor,
@@ -848,6 +849,7 @@ export function TeacherSessionPanel({
             </section>
           ) : (
             <div className="space-y-4">
+              <SectionHint description="من هنا تسجل حضور الطلاب وتسميعهم اليومي، ثم تحفظ الجلسة أو تعتمدها عند الانتهاء." />
 
               {/* Quick Stats Bar */}
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
@@ -1204,30 +1206,41 @@ export function TeacherSessionPanel({
 
       {/* Tab 2: Teacher Students Tab */}
       {activeTab === "students" ? (
-        <TeacherStudentsPanel
-          halaqaId={halaqaId}
-          isOffline={offlineOnly || isOfflineMode || isClientOffline}
-          students={students.map((s) => ({
-            studentId: s.studentId,
-            fullName: s.fullName,
-            displayName: s.displayName,
-            parentPhone: null,
-            gradeLevel: null,
-            halaqaName: selectedHalaqa?.nameAr || "الحلقة",
-            stageName: selectedHalaqa?.stageName || "",
-            memorizationStartedOn: null,
-          }))}
-          onRefresh={() => {
-            if (!offlineOnly && typeof navigator !== "undefined" && navigator.onLine) {
-              window.location.reload();
-            }
-          }}
-        />
+        <div className="space-y-4">
+          <SectionHint description="من هنا تدير طلاب حلقتك، تضيف طالباً جديداً وتتابع بيانات الطلاب المسجلين." />
+          <TeacherStudentsPanel
+            halaqaId={halaqaId}
+            isOffline={offlineOnly || isOfflineMode || isClientOffline}
+            students={students.map((s) => ({
+              studentId: s.studentId,
+              fullName: s.fullName,
+              displayName: s.displayName,
+              parentPhone: null,
+              gradeLevel: null,
+              halaqaName: selectedHalaqa?.nameAr || "الحلقة",
+              stageName: selectedHalaqa?.stageName || "",
+              memorizationStartedOn: null,
+              isPendingSync: s.isPendingSync || s.studentId.startsWith("temp_student"),
+            }))}
+            onRefresh={() => {
+              if (offlineOnly || isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine)) {
+                void getTeacherDataCache("teacher", halaqaId).then((cache) => {
+                  if (cache && cache.students) {
+                    setStudents([...cache.students]);
+                  }
+                });
+              } else {
+                window.location.reload();
+              }
+            }}
+          />
+        </div>
       ) : null}
 
       {/* Tab 3: Saved History Sessions Tab */}
       {activeTab === "history" ? (
         <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-5 shadow-sm space-y-4 text-[var(--text-main)] transition-colors duration-200">
+          <SectionHint description="يعرض هذا القسم الجلسات السابقة وما تم تسجيله لكل طالب." />
           <h2 className="text-lg font-black text-[var(--text-main)]">
             سجل الجلسات التسميعية الأخيرة
           </h2>
@@ -1288,7 +1301,10 @@ export function TeacherSessionPanel({
 
       {/* Tab 4: Teacher Exams Tab */}
       {activeTab === "exams" ? (
-        <TeacherExamsPanel exams={officialExams} />
+        <div className="space-y-4">
+          <SectionHint description="من هنا يمكنك متابعة نتائج وتقارير الاختبارات المتاحة لطلاب الحلقة." />
+          <TeacherExamsPanel exams={officialExams} />
+        </div>
       ) : null}
 
       {/* Tab 5: Parent Report Selector Tab */}
@@ -1305,14 +1321,17 @@ export function TeacherSessionPanel({
             </p>
           </aside>
         ) : (
-          <ParentReportSelector
-            students={students.map((s) => ({
-              id: s.studentId,
-              displayName: s.displayName,
-            }))}
-            hideStageFilter={true}
-            hideTeacherFilter={true}
-          />
+          <div className="space-y-4">
+            <SectionHint description="من هنا يمكنك استخراج تقارير الحلقة والطلاب حسب آخر البيانات المتوفرة." />
+            <ParentReportSelector
+              students={students.map((s) => ({
+                id: s.studentId,
+                displayName: s.displayName,
+              }))}
+              hideStageFilter={true}
+              hideTeacherFilter={true}
+            />
+          </div>
         )
       ) : null}
 
@@ -1330,15 +1349,18 @@ export function TeacherSessionPanel({
             </p>
           </aside>
         ) : (
-          <MonthlyReportsPanel
-            options={{
-              roleCode: "TEACHER",
-              defaultKind: "COMPREHENSIVE",
-              allowedKinds: ["COMPREHENSIVE"],
-              stages: [],
-            }}
-            initialMonth={initialDate.slice(0, 7)}
-          />
+          <div className="space-y-4">
+            <SectionHint description="من هنا يمكنك استخراج تقارير الحلقة والطلاب حسب آخر البيانات المتوفرة." />
+            <MonthlyReportsPanel
+              options={{
+                roleCode: "TEACHER",
+                defaultKind: "COMPREHENSIVE",
+                allowedKinds: ["COMPREHENSIVE"],
+                stages: [],
+              }}
+              initialMonth={initialDate.slice(0, 7)}
+            />
+          </div>
         )
       ) : null}
 

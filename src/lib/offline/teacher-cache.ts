@@ -113,3 +113,28 @@ export async function replaceTempStudentIdInTeacherCache(
     await idbPut(STORES.TEACHER_CACHE, cache);
   }
 }
+
+export async function removeStudentFromTeacherCache(studentId: string): Promise<void> {
+  try {
+    const { idbGetAll } = await import("./indexed-db");
+    const items = await idbGetAll<TeacherCacheRecord>(STORES.TEACHER_CACHE);
+    for (const record of items) {
+      const origLen = record.students.length;
+      record.students = record.students.filter(
+        (s) => s.studentId !== studentId && s.tempId !== studentId,
+      );
+      if (record.editor && record.editor.students) {
+        record.editor.students = record.editor.students.filter(
+          (s) => s.studentId !== studentId && s.tempId !== studentId,
+        );
+      }
+      if (record.students.length !== origLen) {
+        record.cachedAt = Date.now();
+        await idbPut(STORES.TEACHER_CACHE, record);
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to remove student from teacher cache:", err);
+  }
+}
+

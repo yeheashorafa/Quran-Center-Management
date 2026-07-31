@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { AppRoleCode } from "@/lib/auth/constants";
 import { WEEKDAY_CODES, WEEKDAY_LABELS, type WeekdayCode } from "@/lib/halaqat/weekdays";
 import type { ManagerDashboardData } from "@/lib/manager/types";
+import { SectionHint } from "@/components/shared/section-hint";
 import { StudentManagementPanel } from "@/components/students/student-management-panel";
 import { DailyMonitoringPanel } from "@/components/manager/daily-monitoring-panel";
 import { ManagerAlertsPanel } from "@/components/manager/manager-alerts-panel";
@@ -758,60 +759,80 @@ export function ManagementPanel({
       </div>
 
       {activeTab === "monitoring" ? (
-        <DailyMonitoringPanel initialData={monitoringData} />
+        <div className="space-y-4">
+          <SectionHint description="يعرض هذا القسم ملخص سير الحلقات والتسميع والاختبارات حسب آخر تحديث." />
+          <DailyMonitoringPanel initialData={monitoringData} />
+        </div>
       ) : activeTab === "alerts" ? (
-        <ManagerAlertsPanel initialDate={monitoringData.date} />
+        <div className="space-y-4">
+          <SectionHint description="يعرض الطلاب أو الحلقات التي تحتاج متابعة أو إجراء من الإدارة." />
+          <ManagerAlertsPanel initialDate={monitoringData.date} />
+        </div>
       ) : activeTab === "followup" ? (
-        <StudentFollowUpPanel
-          initialDate={monitoringData.date}
-          stages={data.stages}
-          halaqat={data.studentHalaqat}
-        />
+        <div className="space-y-4">
+          <SectionHint description="من هنا تتابع حالة الطلاب وتقدمهم بين الحفظ والمراجعة والاختبارات." />
+          <StudentFollowUpPanel
+            initialDate={monitoringData.date}
+            stages={data.stages}
+            halaqat={data.studentHalaqat}
+          />
+        </div>
       ) : activeTab === "exams" ? (
-        <ManagerExamsPanel
-          initialExams={officialExams}
-          stages={data.stages}
-          halaqat={data.studentHalaqat}
-        />
+        <div className="space-y-4">
+          <SectionHint description="يعرض هذا القسم الاختبارات الرسمية المسجلة ونتائج الطلاب." />
+          <ManagerExamsPanel
+            initialExams={officialExams}
+            stages={data.stages}
+            halaqat={data.studentHalaqat}
+          />
+        </div>
       ) : activeTab === "reports" && reportOptions ? (
-        <MonthlyReportsPanel
-          options={reportOptions}
-          initialMonth={todayInputValue().slice(0, 7)}
-        />
+        <div className="space-y-4">
+          <SectionHint description="من هنا تستخرج تقارير المركز الشهرية وتقارير الاختبارات والمتابعة." />
+          <MonthlyReportsPanel
+            options={reportOptions}
+            initialMonth={todayInputValue().slice(0, 7)}
+          />
+        </div>
       ) : activeTab === "parent_report" ? (
-        <ParentReportSelector
-          title="تنزيل تقرير ولي الأمر (PDF)"
-          description="حدد المرحلة والحلقة ثم اختر الطالب للتنزيل المباشر كملف PDF بدون معاينة."
-          stages={data.stages}
-          halaqat={data.studentHalaqat}
-          students={data.students.map((s) => ({
-            id: s.id,
-            displayName: s.displayName,
-            halaqaId: s.activeEnrollment?.halaqa.id,
-            halaqaName: s.activeEnrollment?.halaqa.nameAr,
-            stageName: s.activeEnrollment?.halaqa.stageName,
-          }))}
-        />
+        <div className="space-y-4">
+          <SectionHint description="من هنا تستخرج وتنزّل تقارير أولياء الأمور للطلاب كملفات PDF." />
+          <ParentReportSelector
+            title="تنزيل تقرير ولي الأمر (PDF)"
+            description="حدد المرحلة والحلقة ثم اختر الطالب للتنزيل المباشر كملف PDF بدون معاينة."
+            stages={data.stages}
+            halaqat={data.studentHalaqat}
+            students={data.students.map((s) => ({
+              id: s.id,
+              displayName: s.displayName,
+              halaqaId: s.activeEnrollment?.halaqa.id,
+              halaqaName: s.activeEnrollment?.halaqa.nameAr,
+              stageName: s.activeEnrollment?.halaqa.stageName,
+            }))}
+          />
+        </div>
       ) : activeTab === "audit" ? (
         <AuditLogPanel />
       ) : activeTab === "halaqat" ? (
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] text-[var(--text-main)]">
-          <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5">
-            <div className="mb-4">
-              <p className="text-xs font-bold text-[var(--gold)]">إدارة الحلقات</p>
-              <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">إضافة حلقة جديدة</h2>
-              <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
-                يتم ربط الحلقة بالمرحلة والشيخ وأيام الدوام في عملية واحدة.
-              </p>
-            </div>
-
-            {!activeTeachers.length ? (
-              <div className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-3 text-sm font-bold text-[var(--status-warning-text)]">
-                أضف مستخدماً بدور الشيخ أولاً قبل إنشاء الحلقة.
+        <div className="space-y-4">
+          <SectionHint description="من هنا تدير الحلقات والمراحل والمشايخ المرتبطين بها." />
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] text-[var(--text-main)]">
+            <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5">
+              <div className="mb-4">
+                <p className="text-xs font-bold text-[var(--gold)]">إدارة الحلقات</p>
+                <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">إضافة حلقة جديدة</h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
+                  يتم ربط الحلقة بالمرحلة والشيخ وأيام الدوام في عملية واحدة.
+                </p>
               </div>
-            ) : null}
 
-            <form className="mt-4 space-y-4" onSubmit={createHalaqa}>
+              {!activeTeachers.length ? (
+                <div className="rounded-2xl border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] p-3 text-sm font-bold text-[var(--status-warning-text)]">
+                  أضف مستخدماً بدور الشيخ أولاً قبل إنشاء الحلقة.
+                </div>
+              ) : null}
+
+              <form className="mt-4 space-y-4" onSubmit={createHalaqa}>
               <div>
                 <label className="form-label" htmlFor="halaqa-name">اسم الحلقة</label>
                 <input
@@ -994,10 +1015,16 @@ export function ManagementPanel({
             )}
           </section>
         </div>
+      </div>
       ) : activeTab === "students" ? (
-        <StudentManagementPanel students={data.students} halaqat={data.studentHalaqat} isOffline={isOffline} />
+        <div className="space-y-4">
+          <SectionHint description="من هنا تدير بيانات الطلاب وتتابع ارتباطهم بالحلقات." />
+          <StudentManagementPanel students={data.students} halaqat={data.studentHalaqat} isOffline={isOffline} />
+        </div>
       ) : (
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] text-[var(--text-main)]">
+        <div className="space-y-4">
+          <SectionHint description="من هنا تدير حسابات المديرين والمشايخ والمختبرين وصلاحياتهم." />
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] text-[var(--text-main)]">
           <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5">
             <p className="text-xs font-bold text-[var(--gold)]">إدارة المستخدمين</p>
             <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">إضافة مستخدم</h2>
@@ -1155,6 +1182,7 @@ export function ManagementPanel({
             ))}
           </section>
         </div>
+      </div>
       )}
 
       {viewingUser ? (

@@ -1,5 +1,6 @@
 import { ExaminerExamsPanel } from "@/components/exams/examiner-exams-panel";
 import { MonthlyReportsPanel } from "@/components/reports/monthly-reports-panel";
+import { SectionHint } from "@/components/shared/section-hint";
 import { requireRole } from "@/lib/auth/session";
 import { todayInPalestine } from "@/lib/memorization-sessions/date";
 import { getOfficialExamList, getOfficialExamOptions } from "@/lib/official-exams/queries";
@@ -30,10 +31,13 @@ export default async function ExaminerDashboardPage() {
         initialExams={initialExams}
         initialDate={todayInPalestine()}
       />
-      <MonthlyReportsPanel
-        options={reportOptions}
-        initialMonth={todayInPalestine().slice(0, 7)}
-      />
+      <div className="space-y-4">
+        <SectionHint description="يعرض هذا القسم تقارير الاختبارات المسجلة وإمكانية تصديرها." />
+        <MonthlyReportsPanel
+          options={reportOptions}
+          initialMonth={todayInPalestine().slice(0, 7)}
+        />
+      </div>
     </section>
   );
 }

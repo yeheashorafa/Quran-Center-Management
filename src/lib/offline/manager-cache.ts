@@ -177,3 +177,25 @@ export async function replaceTempHalaqaIdInManagerCache(tempHalaqaId: string, re
     await idbPut(STORES.MANAGER_CACHE, cache);
   }
 }
+
+export async function removeStudentFromManagerCache(studentId: string): Promise<void> {
+  try {
+    const cache = await getManagerDataCache();
+    if (!cache) return;
+    let modified = false;
+
+    if (cache.officialExams) {
+      const orig = cache.officialExams.length;
+      cache.officialExams = cache.officialExams.filter((ex) => ex.student?.id !== studentId);
+      if (cache.officialExams.length !== orig) modified = true;
+    }
+
+    if (modified) {
+      cache.cachedAt = Date.now();
+      await idbPut(STORES.MANAGER_CACHE, cache);
+    }
+  } catch (err) {
+    console.warn("Failed to remove student from manager cache:", err);
+  }
+}
+

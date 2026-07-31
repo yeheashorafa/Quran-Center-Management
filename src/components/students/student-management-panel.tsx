@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { ManagerStudentItem, StudentHalaqaOption } from "@/lib/students/types";
+import { removeStudentFromTeacherCache } from "@/lib/offline/teacher-cache";
+import { removeStudentFromManagerCache } from "@/lib/offline/manager-cache";
 
 type ApiMessage = { message?: string };
 
@@ -179,6 +181,8 @@ export function StudentManagementPanel({
       if (!response.ok) throw new Error(message);
 
       showResult("success", message);
+      void removeStudentFromTeacherCache(studentId);
+      void removeStudentFromManagerCache(studentId);
       router.refresh();
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر تغيير حالة الطالب.");
@@ -208,6 +212,8 @@ export function StudentManagementPanel({
       if (!response.ok) throw new Error(message);
 
       showResult("success", message);
+      void removeStudentFromTeacherCache(studentId);
+      void removeStudentFromManagerCache(studentId);
       router.refresh();
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر إزالة الطالب من الحلقة.");
@@ -270,6 +276,8 @@ export function StudentManagementPanel({
       if (!response.ok) throw new Error(message);
 
       showResult("success", message);
+      void removeStudentFromTeacherCache(studentId);
+      void removeStudentFromManagerCache(studentId);
       setStudentDeleteModal(null);
       router.refresh();
     } catch (error) {

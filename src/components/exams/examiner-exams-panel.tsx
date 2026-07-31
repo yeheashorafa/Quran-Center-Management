@@ -6,6 +6,7 @@ import type {
   OfficialExamOptionsData,
   OfficialExamType,
 } from "@/lib/official-exams/types";
+import { SectionHint } from "@/components/shared/section-hint";
 import { NetworkStatusBar } from "@/components/offline/network-status-bar";
 import { saveOfflineExaminerProfile } from "@/lib/offline/offline-profile";
 import { getExaminerDataCache, saveExaminerDataCache } from "@/lib/offline/examiner-cache";
@@ -571,6 +572,8 @@ export function ExaminerExamsPanel({
     <div className="space-y-5" dir="rtl">
       {/* Network Status Bar */}
       <NetworkStatusBar onSyncCompleted={() => void refreshPendingExams()} />
+
+      <SectionHint description="من هنا تسجل الاختبارات الرسمية للطلاب وتحدد النتيجة والدرجة أو حالة غير مجاز." />
 
       {/* Offline Mode Banner for Examiner */}
       {isOfflineMode || isClientOffline ? (

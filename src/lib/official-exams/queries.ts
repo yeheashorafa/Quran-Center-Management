@@ -126,7 +126,11 @@ export async function getOfficialExamList(
 ): Promise<OfficialExamListItem[]> {
   const where: Prisma.OfficialExamWhereInput = {
     ...(filters.status && filters.status !== "ALL" ? { status: filters.status } : {}),
-    ...(filters.studentId ? { studentId: filters.studentId } : {}),
+    student: {
+      isActive: true,
+      deletedAt: null,
+      ...(filters.studentId ? { id: filters.studentId } : {}),
+    },
     ...(filters.from || filters.to
       ? {
           examDate: {
@@ -137,20 +141,25 @@ export async function getOfficialExamList(
       : {}),
   };
 
-  if (filters.halaqaId || filters.stageId || teacherUserId) {
-    const enrollmentWhere: Prisma.StudentEnrollmentWhereInput = {};
-    if (filters.halaqaId) enrollmentWhere.halaqaId = filters.halaqaId;
+  const enrollmentWhere: Prisma.StudentEnrollmentWhereInput = {
+    status: "ACTIVE",
+    deletedAt: null,
+    student: { isActive: true, deletedAt: null },
+  };
+  if (filters.halaqaId) enrollmentWhere.halaqaId = filters.halaqaId;
 
-    const halaqaWhere: Prisma.HalaqaWhereInput = {};
-    if (filters.stageId) halaqaWhere.stageId = filters.stageId;
-    if (teacherUserId) {
-      halaqaWhere.staffAssignments = {
-        some: { userId: teacherUserId, endsOn: null, deletedAt: null },
-      };
-    }
-    if (Object.keys(halaqaWhere).length) enrollmentWhere.halaqa = halaqaWhere;
-    where.enrollment = enrollmentWhere;
+  const halaqaWhere: Prisma.HalaqaWhereInput = {
+    status: "ACTIVE",
+    deletedAt: null,
+  };
+  if (filters.stageId) halaqaWhere.stageId = filters.stageId;
+  if (teacherUserId) {
+    halaqaWhere.staffAssignments = {
+      some: { userId: teacherUserId, endsOn: null, deletedAt: null },
+    };
   }
+  enrollmentWhere.halaqa = halaqaWhere;
+  where.enrollment = enrollmentWhere;
 
   const exams = await prisma.officialExam.findMany({
     where,

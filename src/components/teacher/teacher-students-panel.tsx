@@ -3,7 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { ParentReportModal } from "@/components/reports/parent-report-modal";
 import type { ParentReportData } from "@/lib/reports/parent-report-types";
-import { addOfflineStudentToTeacherCache } from "@/lib/offline/teacher-cache";
+import { addOfflineStudentToTeacherCache, removeStudentFromTeacherCache } from "@/lib/offline/teacher-cache";
+import { removeStudentFromManagerCache } from "@/lib/offline/manager-cache";
 import { enqueueSyncItem } from "@/lib/offline/sync-queue";
 import type { SessionStudentValue } from "@/lib/memorization-sessions/types";
 
@@ -235,6 +236,8 @@ export function TeacherStudentsPanel({
       }
 
       setNotice({ type: "success", text: json.message || "تمت إزالة الطالب من الحلقة بنجاح." });
+      void removeStudentFromTeacherCache(studentId);
+      void removeStudentFromManagerCache(studentId);
       onRefresh();
     } catch (err) {
       const text = err instanceof Error && !err.message.toLowerCase().includes("fetch") ? err.message : "تعذر الاتصال بالسيرفر. يرجى التأكد من الاتصال بالإنترنت.";
@@ -265,10 +268,6 @@ export function TeacherStudentsPanel({
   }
 
   function handleOpenAddModal() {
-    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
-      setNotice({ type: "error", text: "إضافة الطلاب تحتاج اتصالاً بالإنترنت." });
-      return;
-    }
     setShowAddModal(true);
   }
 
