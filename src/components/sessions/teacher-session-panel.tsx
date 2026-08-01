@@ -506,9 +506,12 @@ export function TeacherSessionPanel({
     setNotice(null);
 
     const payloadData = { date: sessionDate, complete, items };
-    const isOffline = isOfflineMode || isClientOffline;
+    const isOffline =
+      isOfflineMode ||
+      isClientOffline ||
+      (typeof navigator !== "undefined" && !navigator.onLine);
 
-    if (isOffline || isOfflineMode) {
+    if (isOffline) {
       await enqueueSyncItem({
         teacherId: "teacher",
         halaqaId,
@@ -518,10 +521,18 @@ export function TeacherSessionPanel({
         method: "PUT",
         payload: payloadData,
       });
+      await saveSessionDraft("teacher", halaqaId, sessionDate, students);
+      await saveTeacherDataCache(
+        "teacher",
+        halaqaId,
+        dashboard,
+        students,
+        editor,
+      );
       void getAllSyncItems().then(setOfflineSyncItems);
       setNotice({
         type: "success",
-        text: "تم حفظ الجلسة محلياً، وسيتم رفعها ومزامنتها تلقائياً عند عودة الإنترنت.",
+        text: "تم حفظ التسميع محلياً وسيتم رفعه عند عودة الإنترنت.",
       });
       setBusyKey(null);
       return;
@@ -565,10 +576,18 @@ export function TeacherSessionPanel({
         method: "PUT",
         payload: payloadData,
       });
+      await saveSessionDraft("teacher", halaqaId, sessionDate, students);
+      await saveTeacherDataCache(
+        "teacher",
+        halaqaId,
+        dashboard,
+        students,
+        editor,
+      );
       void getAllSyncItems().then(setOfflineSyncItems);
       setNotice({
         type: "success",
-        text: "تعذر الاتصال بالخادم. تم حفظ الجلسة محلياً بانتظار المزامنة عند عودة الإنترنت.",
+        text: "تم حفظ التسميع محلياً وسيتم رفعه عند عودة الإنترنت.",
       });
     } finally {
       setBusyKey(null);

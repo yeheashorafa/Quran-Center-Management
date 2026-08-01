@@ -56,7 +56,7 @@ export function parseSurahEntriesFromText(text: string): SurahEntry[] {
   const parts = text.split("|").map((p) => p.trim());
   const entries: SurahEntry[] = [];
 
-  parts.forEach((part, index) => {
+  parts.forEach((part) => {
     const surahMatch = QURAN_SURAHS.find((s) => part.includes(s.nameAr));
     if (!surahMatch) return;
 
@@ -67,23 +67,20 @@ export function parseSurahEntriesFromText(text: string): SurahEntry[] {
       part.match(/\((\d+)\s*-\s*(\d+)\)/) ||
       part.match(/من\s*(\d+)\s*إلى\s*(\d+)/);
     if (rangeMatch && rangeMatch[1] && rangeMatch[2]) {
-      fromAyah = Math.max(
-        1,
-        Math.min(Number(rangeMatch[1]), surahMatch.totalAyahs),
-      );
-      toAyah = Math.max(
-        fromAyah,
-        Math.min(Number(rangeMatch[2]), surahMatch.totalAyahs),
-      );
+      fromAyah = Number(rangeMatch[1]);
+      toAyah = Number(rangeMatch[2]);
     }
 
+    const validFrom = Math.max(1, Math.min(fromAyah, surahMatch.totalAyahs));
+    const validTo = Math.max(validFrom, Math.min(toAyah, surahMatch.totalAyahs));
     const pageCount = calculateAyahPageCount(
       surahMatch.number,
-      fromAyah,
-      toAyah,
+      validFrom,
+      validTo,
     );
+
     entries.push({
-      id: `surah-${surahMatch.number}-${fromAyah}-${toAyah}-${index}`,
+      id: `surah-entry-${surahMatch.number}-${Math.random().toString(36).substring(2, 7)}`,
       surahNumber: surahMatch.number,
       fromAyah,
       toAyah,
@@ -101,21 +98,38 @@ export function formatSurahEntriesToText(entries: SurahEntry[]): {
   if (!entries.length) return { text: "", pageCount: 0 };
 
   let totalPages = 0;
-  const formattedParts = entries.map((entry) => {
+  const formattedParts: string[] = [];
+
+  for (const entry of entries) {
     const surah =
       QURAN_SURAHS.find((s) => s.number === entry.surahNumber) ??
       QURAN_SURAHS[0]!;
-    const pages = calculateAyahPageCount(
-      entry.surahNumber,
-      entry.fromAyah,
-      entry.toAyah,
-    );
-    totalPages += pages;
-    if (entry.fromAyah === 1 && entry.toAyah === surah.totalAyahs) {
-      return `سورة ${surah.nameAr} (كاملة)`;
+
+    const numFrom = Number(entry.fromAyah);
+    const numTo = Number(entry.toAyah);
+
+    const isValid =
+      !isNaN(numFrom) &&
+      !isNaN(numTo) &&
+      numFrom >= 1 &&
+      numFrom <= surah.totalAyahs &&
+      numTo >= 1 &&
+      numTo <= surah.totalAyahs &&
+      numFrom <= numTo;
+
+    if (isValid) {
+      const pages = calculateAyahPageCount(entry.surahNumber, numFrom, numTo);
+      totalPages += pages;
+
+      if (numFrom === 1 && numTo === surah.totalAyahs) {
+        formattedParts.push(`سورة ${surah.nameAr} (كاملة)`);
+      } else {
+        formattedParts.push(`سورة ${surah.nameAr} (${numFrom} - ${numTo})`);
+      }
+    } else {
+      formattedParts.push(`سورة ${surah.nameAr} (${entry.fromAyah} - ${entry.toAyah})`);
     }
-    return `سورة ${surah.nameAr} (${entry.fromAyah} - ${entry.toAyah})`;
-  });
+  }
 
   return {
     text: formattedParts.join(" | "),
@@ -129,14 +143,14 @@ export function parseJuzEntriesFromText(text: string): JuzEntry[] {
   const entries: JuzEntry[] = [];
   const seen = new Set<number>();
 
-  parts.forEach((part, index) => {
+  parts.forEach((part) => {
     const match = part.match(/الجزء\s*(\d+)/);
     if (match && match[1]) {
       const num = Number(match[1]);
       if (num >= 1 && num <= 30 && !seen.has(num)) {
         seen.add(num);
         entries.push({
-          id: `juz-${num}-${index}`,
+          id: `juz-entry-${num}-${Math.random().toString(36).substring(2, 7)}`,
           juzNumber: num,
         });
       }
@@ -173,26 +187,22 @@ export function SurahActivityEditor({
 }) {
   const meta = ACTIVITY_LABELS[activity.type];
 
-  // Initialize entries from existing text or default first item
-  const initialEntries = useMemo(() => {
+  const [entries, setEntries] = useState<SurahEntry[]>(() => {
     const parsed = parseSurahEntriesFromText(activity.text);
     if (parsed.length > 0) return parsed;
-    // Default initial surah (Surah An-Naba #78 for memorization, Al-Baqarah #2 for review)
     const defaultSurahNum = activity.type === "MEMORIZATION" ? 78 : 2;
     const surah =
       QURAN_SURAHS.find((s) => s.number === defaultSurahNum) ?? QURAN_SURAHS[0]!;
     return [
       {
-        id: `init-surah-${surah.number}-1-${surah.totalAyahs}`,
+        id: `surah-init-${surah.number}-${Date.now()}`,
         surahNumber: surah.number,
         fromAyah: 1,
         toAyah: surah.totalAyahs,
         pageCount: calculateAyahPageCount(surah.number, 1, surah.totalAyahs),
       },
     ];
-  }, [activity.text, activity.type]);
-
-  const [entries, setEntries] = useState<SurahEntry[]>(initialEntries);
+  });
 
   function notifyChange(newEntries: SurahEntry[]) {
     setEntries(newEntries);
@@ -201,7 +211,6 @@ export function SurahActivityEditor({
   }
 
   function handleAddSurah() {
-    // Pick default An-Naba or Al-Baqarah
     const defaultSurahNum = activity.type === "MEMORIZATION" ? 78 : 2;
     const surah =
       QURAN_SURAHS.find((s) => s.number === defaultSurahNum) ?? QURAN_SURAHS[0]!;
@@ -258,19 +267,36 @@ export function SurahActivityEditor({
     notifyChange(updated);
   }
 
-  function handleAyahChange(id: string, from: number, to: number) {
+  function handleAyahInputChange(id: string, field: "fromAyah" | "toAyah", value: number) {
     const updated = entries.map((entry) => {
       if (entry.id !== id) return entry;
       const surah =
         QURAN_SURAHS.find((s) => s.number === entry.surahNumber) ??
         QURAN_SURAHS[0]!;
-      const validFrom = Math.max(1, Math.min(from, surah.totalAyahs));
-      const validTo = Math.max(validFrom, Math.min(to, surah.totalAyahs));
-      const pages = calculateAyahPageCount(surah.number, validFrom, validTo);
+
+      const newFrom = field === "fromAyah" ? value : entry.fromAyah;
+      const newTo = field === "toAyah" ? value : entry.toAyah;
+
+      const numFrom = Number(newFrom);
+      const numTo = Number(newTo);
+
+      let pages = 0;
+      if (
+        !isNaN(numFrom) &&
+        !isNaN(numTo) &&
+        numFrom >= 1 &&
+        numFrom <= surah.totalAyahs &&
+        numTo >= 1 &&
+        numTo <= surah.totalAyahs &&
+        numFrom <= numTo
+      ) {
+        pages = calculateAyahPageCount(surah.number, numFrom, numTo);
+      }
+
       return {
         ...entry,
-        fromAyah: validFrom,
-        toAyah: validTo,
+        fromAyah: newFrom,
+        toAyah: newTo,
         pageCount: pages,
       };
     });
@@ -313,6 +339,18 @@ export function SurahActivityEditor({
             const surah =
               QURAN_SURAHS.find((s) => s.number === entry.surahNumber) ??
               QURAN_SURAHS[0]!;
+
+            const numFrom = Number(entry.fromAyah);
+            const numTo = Number(entry.toAyah);
+
+            let validationError: string | null = null;
+            if (isNaN(numFrom) || numFrom < 1 || numFrom > surah.totalAyahs) {
+              validationError = `آية البداية (${entry.fromAyah}) خارج حدود سورة ${surah.nameAr} (1 - ${surah.totalAyahs}).`;
+            } else if (isNaN(numTo) || numTo < 1 || numTo > surah.totalAyahs) {
+              validationError = `آية النهاية (${entry.toAyah}) خارج حدود سورة ${surah.nameAr} (1 - ${surah.totalAyahs}).`;
+            } else if (numFrom > numTo) {
+              validationError = "آية البداية يجب أن تكون قبل آية النهاية.";
+            }
 
             return (
               <div
@@ -375,10 +413,10 @@ export function SurahActivityEditor({
                       max={surah.totalAyahs}
                       value={entry.fromAyah}
                       onChange={(e) =>
-                        handleAyahChange(
+                        handleAyahInputChange(
                           entry.id,
+                          "fromAyah",
                           Number(e.target.value),
-                          entry.toAyah,
                         )
                       }
                       className="form-control text-xs font-black"
@@ -396,9 +434,9 @@ export function SurahActivityEditor({
                       max={surah.totalAyahs}
                       value={entry.toAyah}
                       onChange={(e) =>
-                        handleAyahChange(
+                        handleAyahInputChange(
                           entry.id,
-                          entry.fromAyah,
+                          "toAyah",
                           Number(e.target.value),
                         )
                       }
@@ -407,12 +445,18 @@ export function SurahActivityEditor({
                   </div>
                 </div>
 
-                <div className="text-[11px] font-bold text-[var(--text-muted)] text-left">
-                  صفحات هذه السورة:{" "}
-                  <strong className="font-black text-[var(--text-main)]">
-                    {entry.pageCount} ص
-                  </strong>
-                </div>
+                {validationError ? (
+                  <div className="rounded-lg border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-2 text-[11px] font-bold text-[var(--status-danger-text)]">
+                    ⚠️ {validationError}
+                  </div>
+                ) : (
+                  <div className="text-[11px] font-bold text-[var(--text-muted)] text-left">
+                    صفحات هذه السورة:{" "}
+                    <strong className="font-black text-[var(--text-main)]">
+                      {entry.pageCount} ص
+                    </strong>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -442,25 +486,21 @@ export function JuzActivityEditor({
   const meta = ACTIVITY_LABELS.RECITATION;
   const [duplicateNotice, setDuplicateNotice] = useState<string | null>(null);
 
-  // Descending Juz list (30 down to 1) for user selection
   const juzOptionsDescending = useMemo(
     () => [...QURAN_JUZS].sort((a, b) => b.number - a.number),
     [],
   );
 
-  // Initialize entries from existing text or default Juz 30
-  const initialEntries = useMemo(() => {
+  const [entries, setEntries] = useState<JuzEntry[]>(() => {
     const parsed = parseJuzEntriesFromText(activity.text);
     if (parsed.length > 0) return parsed;
     return [
       {
-        id: "init-juz-30",
+        id: `juz-init-${Date.now()}`,
         juzNumber: 30,
       },
     ];
-  }, [activity.text]);
-
-  const [entries, setEntries] = useState<JuzEntry[]>(initialEntries);
+  });
 
   function notifyChange(newEntries: JuzEntry[]) {
     setEntries(newEntries);

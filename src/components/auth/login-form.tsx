@@ -151,7 +151,9 @@ export function LoginForm() {
         (user) =>
           user.roles.includes(role) &&
           (role !== "TEACHER" ||
-            (stageId ? user.stageIds.includes(stageId) : true)),
+            (stageId
+              ? user.stageIds.includes(stageId)
+              : user.stageIds.length > 0)),
       ),
     [options.users, role, stageId],
   );

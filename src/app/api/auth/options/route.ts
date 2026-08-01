@@ -39,7 +39,6 @@ export async function GET() {
         staffAssignments: {
           where: {
             deletedAt: null,
-            startsOn: { lte: today },
             OR: [{ endsOn: null }, { endsOn: { gte: today } }],
             halaqa: {
               status: "ACTIVE",

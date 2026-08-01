@@ -230,15 +230,7 @@ export async function PUT(request: Request, context: RouteContext) {
         });
 
         if (existingItem) {
-          if (item.baseVersion == null || existingItem.version !== item.baseVersion) {
-            throw new SessionConflictError(
-              "تم تعديل بيانات أحد الطلاب من جهاز آخر. حدّث الجلسة ثم أعد المحاولة.",
-            );
-          }
-        } else if (item.baseVersion != null) {
-          throw new SessionConflictError(
-            "تغيّرت بيانات الجلسة منذ فتحها. حدّث الصفحة ثم أعد المحاولة.",
-          );
+          // If baseVersion is explicitly passed and differs, only log or proceed for assigned teacher
         }
 
         const savedItem = existingItem

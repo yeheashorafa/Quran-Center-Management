@@ -322,7 +322,7 @@ export async function processSyncQueue(
 
           const allItems = await getAllSyncItems();
           for (const qItem of allItems) {
-            if (qItem.type === "save_session") {
+            if (qItem.type === "save_session" || qItem.type === "save_student") {
               const sPayload = qItem.payload as SessionSyncPayload;
               let modified = false;
               for (const sEntry of sPayload.items) {
