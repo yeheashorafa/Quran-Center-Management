@@ -42,7 +42,7 @@ export function DynamicLogo({
     if (target.src.includes("logo-dark.png")) {
       target.src = "/brand/logo-light.png";
     } else if (target.src.includes("logo-light.png")) {
-      target.src = "/brand/logo.png";
+      target.src = "/brand/logo-dark.png";
     }
   };
 

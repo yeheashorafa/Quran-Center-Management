@@ -33,14 +33,14 @@ export function DynamicDashboardLogo({
   );
 
   const isDark = mounted && resolvedTheme === "dark";
-  const logoSrc = isDark ? "/nav/logo-dark.png" : "/nav/logo-light.png";
+  const logoSrc = isDark ? "/brand/logo-dark.png" : "/brand/logo-light.png";
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     const target = e.currentTarget;
     if (target.src.includes("logo-dark.png")) {
-      target.src = "/nav/logo-light.png";
+      target.src = "/brand/logo-light.png";
     } else if (target.src.includes("logo-light.png")) {
-      target.src = "/nav/logo.png";
+      target.src = "/brand/logo-dark.png";
     }
   };
 
