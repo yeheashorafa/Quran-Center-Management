@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { ParentReportSelector } from "@/components/reports/parent-report-selector";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import type { StudentProfileData } from "@/lib/students/types";
+import type { StudentProfileData, StudentProfileEnrollment } from "@/lib/students/types";
 
 type ApiMessage = { message?: string };
 type Notice = { type: "success" | "error"; text: string } | null;
@@ -44,8 +43,15 @@ async function readApiMessage(response: Response): Promise<string> {
   return data.message || (response.ok ? "تمت العملية بنجاح." : "تعذر تنفيذ العملية.");
 }
 
-export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
-  const router = useRouter();
+export function StudentProfilePanel({ data: initialData }: { data: StudentProfileData }) {
+  const [data, setDataState] = useState<StudentProfileData>(initialData);
+  const [prevInitial, setPrevInitial] = useState(initialData);
+
+  if (prevInitial !== initialData) {
+    setPrevInitial(initialData);
+    setDataState(initialData);
+  }
+
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [transferOperationKey, setTransferOperationKey] = useState(createIdempotencyKey);
@@ -77,6 +83,13 @@ export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
   async function updateProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const fullName = String(formData.get("fullName") || "").trim();
+    const displayName = String(formData.get("displayName") || "").trim();
+    const parentPhone = String(formData.get("parentPhone") || "").trim() || null;
+    const gradeLevel = String(formData.get("gradeLevel") || "").trim() || null;
+    const memorizationStartedOn = String(formData.get("memorizationStartedOn") || "").trim() || null;
+    const notes = String(formData.get("notes") || "").trim() || null;
+
     setBusyKey("profile");
     setNotice(null);
 
@@ -85,18 +98,31 @@ export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName: formData.get("fullName"),
-          displayName: formData.get("displayName"),
-          parentPhone: formData.get("parentPhone"),
-          gradeLevel: formData.get("gradeLevel"),
-          memorizationStartedOn: formData.get("memorizationStartedOn"),
-          notes: formData.get("notes"),
+          fullName,
+          displayName,
+          parentPhone,
+          gradeLevel,
+          memorizationStartedOn,
+          notes,
         }),
       });
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
+
+      setDataState((prev) => ({
+        ...prev,
+        student: {
+          ...prev.student,
+          fullName,
+          displayName,
+          parentPhone,
+          gradeLevel,
+          memorizationStartedOn,
+          notes,
+        },
+      }));
+
       showNotice("success", message);
-      router.refresh();
     } catch (error) {
       showNotice("error", error instanceof Error ? error.message : "تعذر تحديث ملف الطالب.");
     } finally {
@@ -118,8 +144,13 @@ export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
       });
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
+
+      setDataState((prev) => ({
+        ...prev,
+        student: { ...prev.student, isActive },
+      }));
+
       showNotice("success", message);
-      router.refresh();
     } catch (error) {
       showNotice("error", error instanceof Error ? error.message : "تعذر تحديث حالة الطالب.");
     } finally {
@@ -131,6 +162,9 @@ export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const halaqaId = String(formData.get("halaqaId") || "");
+    const startedOn = String(formData.get("startedOn") || "");
+
     setBusyKey("enrollment");
     setNotice(null);
 
@@ -139,15 +173,27 @@ export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          halaqaId: formData.get("halaqaId"),
-          startedOn: formData.get("startedOn"),
+          halaqaId,
+          startedOn,
         }),
       });
-      const message = await readApiMessage(response);
-      if (!response.ok) throw new Error(message);
+      const json = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        enrollment?: StudentProfileData["activeEnrollment"];
+      };
+      if (!response.ok) throw new Error(json.message || "تعذر تسجيل الطالب في الحلقة.");
       form.reset();
-      showNotice("success", message);
-      router.refresh();
+
+      if (json.enrollment) {
+        const newEnrollment = json.enrollment;
+        setDataState((prev) => ({
+          ...prev,
+          activeEnrollment: newEnrollment,
+          enrollmentHistory: newEnrollment ? [newEnrollment, ...prev.enrollmentHistory] : prev.enrollmentHistory,
+        }));
+      }
+
+      showNotice("success", json.message || "تم تسجيل الطالب في الحلقة بنجاح.");
     } catch (error) {
       showNotice("error", error instanceof Error ? error.message : "تعذر تسجيل الطالب في الحلقة.");
     } finally {
@@ -193,11 +239,36 @@ export function StudentProfilePanel({ data }: { data: StudentProfileData }) {
               idempotencyKey: transferOperationKey,
             }),
           });
-          const message = await readApiMessage(response);
-          if (!response.ok) throw new Error(message);
+          const json = (await response.json().catch(() => ({}))) as { message?: string };
+          if (!response.ok) throw new Error(json.message || "تعذر نقل الطالب.");
           setTransferOperationKey(createIdempotencyKey());
-          showNotice("success", message);
-          router.refresh();
+
+          const newActiveEnrollment: StudentProfileEnrollment = {
+            id: `transfer_${Date.now()}`,
+            status: "ACTIVE",
+            startedOn: transferDate,
+            endedOn: null,
+            endReason: null,
+            halaqa: {
+              id: target.id,
+              nameAr: target.nameAr,
+              stageName: target.stageName,
+              teacherName: target.teacherName,
+            },
+          };
+
+          setDataState((prev) => ({
+            ...prev,
+            activeEnrollment: newActiveEnrollment,
+            enrollmentHistory: [
+              newActiveEnrollment,
+              ...prev.enrollmentHistory.map((e) =>
+                e.endedOn ? e : { ...e, endedOn: transferDate, status: "TRANSFERRED" as const },
+              ),
+            ],
+          }));
+
+          showNotice("success", json.message || "تم نقل الطالب بنجاح.");
         } catch (error) {
           showNotice("error", error instanceof Error ? error.message : "تعذر نقل الطالب.");
         } finally {

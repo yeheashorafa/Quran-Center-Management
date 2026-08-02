@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import type { ManagerStudentItem, StudentHalaqaOption } from "@/lib/students/types";
 import { removeStudentFromTeacherCache } from "@/lib/offline/teacher-cache";
 import { removeStudentFromManagerCache } from "@/lib/offline/manager-cache";
@@ -42,12 +41,13 @@ export function StudentManagementPanel({
   students,
   halaqat,
   isOffline = false,
+  onStudentsChange,
 }: {
   students: ManagerStudentItem[];
   halaqat: StudentHalaqaOption[];
   isOffline?: boolean;
+  onStudentsChange?: (updater: (prev: ManagerStudentItem[]) => ManagerStudentItem[]) => void;
 }) {
-  const router = useRouter();
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [query, setQuery] = useState("");
@@ -106,12 +106,18 @@ export function StudentManagementPanel({
         }),
       });
 
-      const message = await readApiMessage(response);
-      if (!response.ok) throw new Error(message);
+      const json = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        student?: ManagerStudentItem;
+      };
+      if (!response.ok) throw new Error(json.message || "تعذر إنشاء ملف الطالب.");
+
+      if (json.student && onStudentsChange) {
+        onStudentsChange((prev) => [json.student!, ...prev]);
+      }
 
       form.reset();
-      showResult("success", message);
-      router.refresh();
+      showResult("success", json.message || "تم إنشاء ملف الطالب بنجاح.");
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر إنشاء ملف الطالب.");
     } finally {
@@ -131,27 +137,50 @@ export function StudentManagementPanel({
     setNotice(null);
 
     const formData = new FormData(event.currentTarget);
+    const fullName = String(formData.get("fullName") || "").trim();
+    const displayName = String(formData.get("displayName") || "").trim();
+    const parentPhone = String(formData.get("parentPhone") || "").trim() || null;
+    const gradeLevel = String(formData.get("gradeLevel") || "").trim() || null;
+    const memorizationStartedOn = String(formData.get("memorizationStartedOn") || "").trim() || null;
+    const notes = String(formData.get("notes") || "").trim() || null;
 
     try {
       const response = await fetch(`/api/manager/students/${editingStudent.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName: formData.get("fullName"),
-          displayName: formData.get("displayName"),
-          parentPhone: formData.get("parentPhone"),
-          gradeLevel: formData.get("gradeLevel"),
-          memorizationStartedOn: formData.get("memorizationStartedOn"),
-          notes: formData.get("notes"),
+          fullName,
+          displayName,
+          parentPhone,
+          gradeLevel,
+          memorizationStartedOn,
+          notes,
         }),
       });
 
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
 
+      if (onStudentsChange) {
+        onStudentsChange((prev) =>
+          prev.map((s) =>
+            s.id === editingStudent.id
+              ? {
+                  ...s,
+                  fullName,
+                  displayName,
+                  parentPhone,
+                  gradeLevel,
+                  memorizationStartedOn,
+                  notes,
+                }
+              : s,
+          ),
+        );
+      }
+
       showResult("success", message);
       setEditingStudent(null);
-      router.refresh();
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر تحديث ملف الطالب.");
     } finally {
@@ -180,10 +209,15 @@ export function StudentManagementPanel({
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
 
+      if (onStudentsChange) {
+        onStudentsChange((prev) =>
+          prev.map((s) => (s.id === studentId ? { ...s, isActive: !currentIsActive } : s)),
+        );
+      }
+
       showResult("success", message);
       void removeStudentFromTeacherCache(studentId);
       void removeStudentFromManagerCache(studentId);
-      router.refresh();
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر تغيير حالة الطالب.");
     } finally {
@@ -211,10 +245,15 @@ export function StudentManagementPanel({
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
 
+      if (onStudentsChange) {
+        onStudentsChange((prev) =>
+          prev.map((s) => (s.id === studentId ? { ...s, activeEnrollment: null } : s)),
+        );
+      }
+
       showResult("success", message);
       void removeStudentFromTeacherCache(studentId);
       void removeStudentFromManagerCache(studentId);
-      router.refresh();
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر إزالة الطالب من الحلقة.");
     } finally {
@@ -275,11 +314,14 @@ export function StudentManagementPanel({
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
 
+      if (onStudentsChange) {
+        onStudentsChange((prev) => prev.filter((s) => s.id !== studentId));
+      }
+
       showResult("success", message);
       void removeStudentFromTeacherCache(studentId);
       void removeStudentFromManagerCache(studentId);
       setStudentDeleteModal(null);
-      router.refresh();
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر حذف الطالب.");
     } finally {

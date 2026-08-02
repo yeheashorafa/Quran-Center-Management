@@ -69,17 +69,36 @@ export type HalaqaCreateSyncPayload = {
   dependencyId?: string | null;
 };
 
+export type HalaqaUpdateSyncPayload = {
+  halaqaId: string;
+  nameAr?: string;
+  stageId?: string;
+  teacherUserId?: string;
+  weekdays?: string[];
+  status?: "ACTIVE" | "INACTIVE";
+  notes?: string | null;
+  idempotencyKey: string;
+};
+
 export type SyncQueueItem = {
   queueId: string;
-  type: "save_student" | "save_session" | "save_official_exam" | "create_student" | "create_user" | "create_halaqa";
+  type:
+    | "save_student"
+    | "save_session"
+    | "save_official_exam"
+    | "create_student"
+    | "create_user"
+    | "create_halaqa"
+    | "update_halaqa";
   endpoint: string;
-  method: "PUT" | "POST";
+  method: "PUT" | "POST" | "PATCH";
   payload:
     | SessionSyncPayload
     | OfficialExamSyncPayload
     | StudentCreateSyncPayload
     | UserCreateSyncPayload
-    | HalaqaCreateSyncPayload;
+    | HalaqaCreateSyncPayload
+    | HalaqaUpdateSyncPayload;
   createdAt: number;
   updatedAt: number;
   status: SyncQueueItemStatus;
@@ -286,6 +305,16 @@ export async function processSyncQueue(
           effectiveFrom: p.effectiveFrom,
           notes: p.notes,
         };
+      } else if (item.type === "update_halaqa") {
+        const p = item.payload as HalaqaUpdateSyncPayload;
+        bodyPayload = {
+          nameAr: p.nameAr,
+          stageId: p.stageId,
+          teacherUserId: p.teacherUserId,
+          weekdays: p.weekdays,
+          status: p.status,
+          notes: p.notes,
+        };
       }
 
       const response = await fetch(item.endpoint, {
@@ -298,6 +327,8 @@ export async function processSyncQueue(
             ? { "X-Idempotency-Key": (item.payload as UserCreateSyncPayload).idempotencyKey }
             : item.type === "create_halaqa"
             ? { "X-Idempotency-Key": (item.payload as HalaqaCreateSyncPayload).idempotencyKey }
+            : item.type === "update_halaqa"
+            ? { "X-Idempotency-Key": (item.payload as HalaqaUpdateSyncPayload).idempotencyKey }
             : {}),
         },
         body: JSON.stringify(bodyPayload),

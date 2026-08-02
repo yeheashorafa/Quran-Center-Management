@@ -8,8 +8,8 @@ import type { SessionActivityCode } from "@/lib/memorization-sessions/types";
 export type SurahEntry = {
   id: string;
   surahNumber: number;
-  fromAyah: number;
-  toAyah: number;
+  fromAyah: number | string;
+  toAyah: number | string;
   pageCount: number;
 };
 
@@ -60,8 +60,8 @@ export function parseSurahEntriesFromText(text: string): SurahEntry[] {
     const surahMatch = QURAN_SURAHS.find((s) => part.includes(s.nameAr));
     if (!surahMatch) return;
 
-    let fromAyah = 1;
-    let toAyah = surahMatch.totalAyahs;
+    let fromAyah: number | string = 1;
+    let toAyah: number | string = surahMatch.totalAyahs;
 
     const rangeMatch =
       part.match(/\((\d+)\s*-\s*(\d+)\)/) ||
@@ -71,8 +71,11 @@ export function parseSurahEntriesFromText(text: string): SurahEntry[] {
       toAyah = Number(rangeMatch[2]);
     }
 
-    const validFrom = Math.max(1, Math.min(fromAyah, surahMatch.totalAyahs));
-    const validTo = Math.max(validFrom, Math.min(toAyah, surahMatch.totalAyahs));
+    const numFrom = parseInt(String(fromAyah), 10);
+    const numTo = parseInt(String(toAyah), 10);
+
+    const validFrom = Math.max(1, Math.min(numFrom || 1, surahMatch.totalAyahs));
+    const validTo = Math.max(validFrom, Math.min(numTo || surahMatch.totalAyahs, surahMatch.totalAyahs));
     const pageCount = calculateAyahPageCount(
       surahMatch.number,
       validFrom,
@@ -80,7 +83,7 @@ export function parseSurahEntriesFromText(text: string): SurahEntry[] {
     );
 
     entries.push({
-      id: `surah-entry-${surahMatch.number}-${Math.random().toString(36).substring(2, 7)}`,
+      id: `surah-${surahMatch.number}-${Math.random().toString(36).substring(2, 9)}`,
       surahNumber: surahMatch.number,
       fromAyah,
       toAyah,
@@ -105,8 +108,8 @@ export function formatSurahEntriesToText(entries: SurahEntry[]): {
       QURAN_SURAHS.find((s) => s.number === entry.surahNumber) ??
       QURAN_SURAHS[0]!;
 
-    const numFrom = Number(entry.fromAyah);
-    const numTo = Number(entry.toAyah);
+    const numFrom = parseInt(String(entry.fromAyah), 10);
+    const numTo = parseInt(String(entry.toAyah), 10);
 
     const isValid =
       !isNaN(numFrom) &&
@@ -143,14 +146,14 @@ export function parseJuzEntriesFromText(text: string): JuzEntry[] {
   const entries: JuzEntry[] = [];
   const seen = new Set<number>();
 
-  parts.forEach((part) => {
+  parts.forEach((part, index) => {
     const match = part.match(/الجزء\s*(\d+)/);
     if (match && match[1]) {
       const num = Number(match[1]);
       if (num >= 1 && num <= 30 && !seen.has(num)) {
         seen.add(num);
         entries.push({
-          id: `juz-entry-${num}-${Math.random().toString(36).substring(2, 7)}`,
+          id: `juz-${num}-${index}`,
           juzNumber: num,
         });
       }
@@ -195,7 +198,7 @@ export function SurahActivityEditor({
       QURAN_SURAHS.find((s) => s.number === defaultSurahNum) ?? QURAN_SURAHS[0]!;
     return [
       {
-        id: `surah-init-${surah.number}-${Date.now()}`,
+        id: `surah-init-${surah.number}-${Math.random().toString(36).substring(2, 9)}`,
         surahNumber: surah.number,
         fromAyah: 1,
         toAyah: surah.totalAyahs,
@@ -215,7 +218,7 @@ export function SurahActivityEditor({
     const surah =
       QURAN_SURAHS.find((s) => s.number === defaultSurahNum) ?? QURAN_SURAHS[0]!;
     const newEntry: SurahEntry = {
-      id: `surah-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: `surah-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       surahNumber: surah.number,
       fromAyah: 1,
       toAyah: surah.totalAyahs,
@@ -267,18 +270,18 @@ export function SurahActivityEditor({
     notifyChange(updated);
   }
 
-  function handleAyahInputChange(id: string, field: "fromAyah" | "toAyah", value: number) {
+  function handleAyahInputChange(id: string, field: "fromAyah" | "toAyah", rawValue: string) {
     const updated = entries.map((entry) => {
       if (entry.id !== id) return entry;
       const surah =
         QURAN_SURAHS.find((s) => s.number === entry.surahNumber) ??
         QURAN_SURAHS[0]!;
 
-      const newFrom = field === "fromAyah" ? value : entry.fromAyah;
-      const newTo = field === "toAyah" ? value : entry.toAyah;
+      const newFromVal = field === "fromAyah" ? rawValue : entry.fromAyah;
+      const newToVal = field === "toAyah" ? rawValue : entry.toAyah;
 
-      const numFrom = Number(newFrom);
-      const numTo = Number(newTo);
+      const numFrom = parseInt(String(newFromVal), 10);
+      const numTo = parseInt(String(newToVal), 10);
 
       let pages = 0;
       if (
@@ -295,8 +298,8 @@ export function SurahActivityEditor({
 
       return {
         ...entry,
-        fromAyah: newFrom,
-        toAyah: newTo,
+        fromAyah: newFromVal,
+        toAyah: newToVal,
         pageCount: pages,
       };
     });
@@ -340,16 +343,20 @@ export function SurahActivityEditor({
               QURAN_SURAHS.find((s) => s.number === entry.surahNumber) ??
               QURAN_SURAHS[0]!;
 
-            const numFrom = Number(entry.fromAyah);
-            const numTo = Number(entry.toAyah);
+            const numFrom = parseInt(String(entry.fromAyah), 10);
+            const numTo = parseInt(String(entry.toAyah), 10);
 
             let validationError: string | null = null;
-            if (isNaN(numFrom) || numFrom < 1 || numFrom > surah.totalAyahs) {
-              validationError = `آية البداية (${entry.fromAyah}) خارج حدود سورة ${surah.nameAr} (1 - ${surah.totalAyahs}).`;
-            } else if (isNaN(numTo) || numTo < 1 || numTo > surah.totalAyahs) {
-              validationError = `آية النهاية (${entry.toAyah}) خارج حدود سورة ${surah.nameAr} (1 - ${surah.totalAyahs}).`;
+            if (isNaN(numFrom) || String(entry.fromAyah).trim() === "") {
+              validationError = "يرجى إدخال رقم آية البداية.";
+            } else if (isNaN(numTo) || String(entry.toAyah).trim() === "") {
+              validationError = "يرجى إدخال رقم آية النهاية.";
+            } else if (numFrom < 1 || numFrom > surah.totalAyahs) {
+              validationError = `آية البداية (${entry.fromAyah}) يجب أن تكون بين 1 و ${surah.totalAyahs} (سورة ${surah.nameAr}).`;
+            } else if (numTo < 1 || numTo > surah.totalAyahs) {
+              validationError = `آية النهاية (${entry.toAyah}) يجب أن تكون بين 1 و ${surah.totalAyahs} (سورة ${surah.nameAr}).`;
             } else if (numFrom > numTo) {
-              validationError = "آية البداية يجب أن تكون قبل آية النهاية.";
+              validationError = "آية البداية يجب أن تكون قبل أو تساوي آية النهاية.";
             }
 
             return (
@@ -416,7 +423,7 @@ export function SurahActivityEditor({
                         handleAyahInputChange(
                           entry.id,
                           "fromAyah",
-                          Number(e.target.value),
+                          e.target.value,
                         )
                       }
                       className="form-control text-xs font-black"
@@ -437,7 +444,7 @@ export function SurahActivityEditor({
                         handleAyahInputChange(
                           entry.id,
                           "toAyah",
-                          Number(e.target.value),
+                          e.target.value,
                         )
                       }
                       className="form-control text-xs font-black"

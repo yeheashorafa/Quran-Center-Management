@@ -1242,15 +1242,11 @@ export function TeacherSessionPanel({
               isPendingSync: s.isPendingSync || s.studentId.startsWith("temp_student"),
             }))}
             onRefresh={() => {
-              if (offlineOnly || isOfflineMode || (typeof navigator !== "undefined" && !navigator.onLine)) {
-                void getTeacherDataCache("teacher", halaqaId).then((cache) => {
-                  if (cache && cache.students) {
-                    setStudents([...cache.students]);
-                  }
-                });
-              } else {
-                window.location.reload();
-              }
+              void getTeacherDataCache("teacher", halaqaId).then((cache) => {
+                if (cache && cache.students) {
+                  setStudents([...cache.students]);
+                }
+              });
             }}
           />
         </div>
@@ -1390,7 +1386,11 @@ export function TeacherSessionPanel({
           onClose={() => setSelectedHistorySession(null)}
           onUpdateSuccess={() => {
             setSelectedHistorySession(null);
-            window.location.reload();
+            void getTeacherDataCache("teacher", halaqaId).then((cache) => {
+              if (cache && cache.students) {
+                setStudents([...cache.students]);
+              }
+            });
           }}
         />
       ) : null}

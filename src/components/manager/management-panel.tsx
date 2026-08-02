@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import type { AppRoleCode } from "@/lib/auth/constants";
 import { WEEKDAY_CODES, WEEKDAY_LABELS, type WeekdayCode } from "@/lib/halaqat/weekdays";
 import type { ManagerDashboardData } from "@/lib/manager/types";
@@ -79,7 +78,6 @@ export function ManagementPanel({
   initialTab?: ActiveTab;
   isOffline?: boolean;
 }) {
-  const router = useRouter();
   const [data, setData] = useState<ManagerDashboardData>(initialData);
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -163,6 +161,16 @@ export function ManagementPanel({
     role: "TEACHER" | "CENTER_MANAGER" | "EXAMINER";
     status: "ACTIVE" | "DISABLED";
     isCurrentUser: boolean;
+  } | null>(null);
+
+  const [editingHalaqa, setEditingHalaqa] = useState<{
+    id: string;
+    nameAr: string;
+    stageId: string;
+    teacherUserId: string;
+    weekdays: WeekdayCode[];
+    status: "ACTIVE" | "INACTIVE";
+    notes: string;
   } | null>(null);
 
   const [resettingUser, setResettingUser] = useState<{
@@ -311,13 +319,37 @@ export function ManagementPanel({
         }),
       });
 
-      const message = await readApiMessage(response);
-      if (!response.ok) throw new Error(message);
+      const json = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        halaqah?: { id: string; code: string; nameAr: string; status: "ACTIVE" | "INACTIVE" };
+        halaqa?: { id: string; code: string; nameAr: string; status: "ACTIVE" | "INACTIVE" };
+      };
+      if (!response.ok) throw new Error(json.message || "تعذر إنشاء الحلقة.");
+
+      const created = json.halaqah || json.halaqa;
+      const stage = data.stages.find((s) => s.id === halaqaStageId);
+      const teacher = data.users.find((u) => u.id === teacherUserId);
+
+      const newHalaqaItem: import("@/lib/manager/types").ManagerHalaqaItem = {
+        id: created?.id || `halaqa_${Date.now()}`,
+        code: created?.code || `H_${Date.now().toString().slice(-4)}`,
+        nameAr,
+        status: created?.status || "ACTIVE",
+        notes: notes || null,
+        stage: stage ? { id: stage.id, nameAr: stage.nameAr } : null,
+        primaryTeacher: teacher ? { id: teacher.id, displayName: teacher.displayName } : null,
+        weekdays: halaqaWeekdays,
+        activeStudentsCount: 0,
+      };
+
+      setData((prev) => ({
+        ...prev,
+        halaqat: [...prev.halaqat, newHalaqaItem],
+      }));
 
       form.reset();
       setHalaqaWeekdays(firstStage?.defaultWeekdays ?? []);
-      showResult("success", message);
-      router.refresh();
+      showResult("success", json.message || "تم إنشاء الحلقة بنجاح.");
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر إنشاء الحلقة.");
     } finally {
@@ -409,14 +441,150 @@ export function ManagementPanel({
         }),
       });
 
-      const message = await readApiMessage(response);
-      if (!response.ok) throw new Error(message);
+      const json = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        user?: { id: string; username: string; displayName: string; status: "ACTIVE" | "DISABLED" };
+      };
+      if (!response.ok) throw new Error(json.message || "تعذر إنشاء المستخدم.");
+
+      const createdUser = json.user;
+      const roleNameAr = role === "TEACHER" ? "محفظ" : role === "EXAMINER" ? "مختبر" : "مدير النظام";
+      const newUserItem: import("@/lib/manager/types").ManagerUserItem = {
+        id: createdUser?.id || `user_${Date.now()}`,
+        username,
+        displayName,
+        status: createdUser?.status || "ACTIVE",
+        roles: [{ code: role, nameAr: roleNameAr }],
+        activeHalaqat: [],
+        isCurrentUser: false,
+      };
+
+      setData((prev) => ({
+        ...prev,
+        users: [...prev.users, newUserItem],
+      }));
 
       form.reset();
-      showResult("success", message);
-      router.refresh();
+      showResult("success", json.message || "تم إنشاء المستخدم بنجاح.");
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر إنشاء المستخدم.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function editHalaqa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingHalaqa) return;
+
+    setBusyKey(`edit-halaqa-${editingHalaqa.id}`);
+    setNotice(null);
+
+    const { id, nameAr, stageId, teacherUserId, weekdays, status, notes } = editingHalaqa;
+
+    if (nameAr.trim().length < 2) {
+      showResult("error", "أدخل اسم الحلقة (حرفين على الأقل).");
+      setBusyKey(null);
+      return;
+    }
+    if (!teacherUserId) {
+      showResult("error", "اختر الشيخ المسؤول عن الحلقة.");
+      setBusyKey(null);
+      return;
+    }
+    if (!weekdays.length) {
+      showResult("error", "اختر يوماً واحداً على الأقل لأيام الحلقة.");
+      setBusyKey(null);
+      return;
+    }
+
+    const stage = data.stages.find((s) => s.id === stageId);
+    const teacher = data.users.find((u) => u.id === teacherUserId);
+
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      try {
+        const idempotencyKey = `update_halaqa_${id}_${Date.now()}`;
+        await enqueueSyncItem({
+          type: "update_halaqa",
+          endpoint: `/api/manager/halaqat/${id}`,
+          method: "PATCH",
+          payload: {
+            halaqaId: id,
+            nameAr,
+            stageId,
+            teacherUserId,
+            weekdays,
+            status,
+            notes,
+            idempotencyKey,
+          },
+        });
+
+        setData((prev) => ({
+          ...prev,
+          halaqat: prev.halaqat.map((h) => {
+            if (h.id !== id) return h;
+            return {
+              ...h,
+              nameAr,
+              status,
+              notes: notes || null,
+              stage: stage ? { id: stage.id, nameAr: stage.nameAr } : h.stage,
+              primaryTeacher: teacher ? { id: teacher.id, displayName: teacher.displayName } : h.primaryTeacher,
+              weekdays,
+              isPendingSync: true,
+            };
+          }),
+        }));
+
+        setEditingHalaqa(null);
+        showResult("success", "تم حفظ مسودة تعديل الحلقة محلياً (بانتظار المزامنة).");
+      } catch {
+        showResult("error", "تعذر حفظ تعديل الحلقة محلياً.");
+      } finally {
+        setBusyKey(null);
+      }
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/manager/halaqat/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nameAr,
+          stageId,
+          teacherUserId,
+          weekdays,
+          status,
+          notes,
+        }),
+      });
+
+      const json = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) throw new Error(json.message || "تعذر تعديل الحلقة.");
+
+      setData((prev) => ({
+        ...prev,
+        halaqat: prev.halaqat.map((h) => {
+          if (h.id !== id) return h;
+          return {
+            ...h,
+            nameAr,
+            status,
+            notes: notes || null,
+            stage: stage ? { id: stage.id, nameAr: stage.nameAr } : h.stage,
+            primaryTeacher: teacher ? { id: teacher.id, displayName: teacher.displayName } : h.primaryTeacher,
+            weekdays,
+            isPendingSync: false,
+          };
+        }),
+      }));
+
+      setEditingHalaqa(null);
+      showResult("success", json.message || "تم تعديل بيانات الحلقة بنجاح.");
+    } catch (error) {
+      showResult("error", error instanceof Error ? error.message : "تعذر تعديل الحلقة.");
     } finally {
       setBusyKey(null);
     }
@@ -448,8 +616,12 @@ export function ManagementPanel({
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
 
+      setData((prev) => ({
+        ...prev,
+        halaqat: prev.halaqat.map((h) => (h.id === halaqaId ? { ...h, status: targetStatus } : h)),
+      }));
+
       showResult("success", message);
-      router.refresh();
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر تغيير حالة الحلقة.");
     } finally {
@@ -510,9 +682,13 @@ export function ManagementPanel({
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
 
+      setData((prev) => ({
+        ...prev,
+        halaqat: prev.halaqat.filter((h) => h.id !== halaqaId),
+      }));
+
       showResult("success", message);
       setHalaqaDeleteModal(null);
-      router.refresh();
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر حذف الحلقة.");
     } finally {
@@ -545,8 +721,12 @@ export function ManagementPanel({
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
 
+      setData((prev) => ({
+        ...prev,
+        users: prev.users.map((u) => (u.id === userId ? { ...u, status: targetStatus } : u)),
+      }));
+
       showResult("success", message);
-      router.refresh();
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر تغيير حالة المستخدم.");
     } finally {
@@ -575,8 +755,12 @@ export function ManagementPanel({
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
 
+      setData((prev) => ({
+        ...prev,
+        users: prev.users.filter((u) => u.id !== userId),
+      }));
+
       showResult("success", message);
-      router.refresh();
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر حذف المستخدم.");
     } finally {
@@ -638,9 +822,23 @@ export function ManagementPanel({
       const message = await readApiMessage(response);
       if (!response.ok) throw new Error(message);
 
+      const roleNameAr = editingUser.role === "TEACHER" ? "محفظ" : editingUser.role === "EXAMINER" ? "مختبر" : "مدير النظام";
+      setData((prev) => ({
+        ...prev,
+        users: prev.users.map((u) => {
+          if (u.id !== editingUser.id) return u;
+          return {
+            ...u,
+            displayName: editingUser.displayName,
+            username: editingUser.username,
+            status: editingUser.status,
+            roles: [{ code: editingUser.role, nameAr: roleNameAr }],
+          };
+        }),
+      }));
+
       showResult("success", message);
       setEditingUser(null);
-      router.refresh();
     } catch (error) {
       showResult("error", error instanceof Error ? error.message : "تعذر تحديث بيانات المستخدم.");
     } finally {
@@ -983,32 +1181,53 @@ export function ManagementPanel({
 
                 {halaqa.notes ? <p className="mt-4 rounded-xl bg-[var(--card-soft)] border border-[var(--border-color)] p-3 text-sm leading-6 text-[var(--text-muted)]">{halaqa.notes}</p> : null}
 
-                {halaqa.status === "INACTIVE" ? (
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button
-                      className="min-h-11 rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-3 text-sm font-black text-[var(--status-success-text)] transition hover:opacity-90 disabled:opacity-60"
-                      disabled={busyKey !== null}
-                      onClick={() => requestHalaqaStatusToggle(halaqa.id, "ACTIVE", halaqa.nameAr)}
-                    >
-                      {busyKey === `halaqa-${halaqa.id}` ? "جاري التحديث..." : "إعادة تفعيل الحلقة"}
-                    </button>
-                    <button
-                      className="min-h-11 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 text-sm font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:opacity-60"
-                      disabled={busyKey !== null}
-                      onClick={() => requestHalaqaPermanentDelete(halaqa.id, halaqa.nameAr)}
-                    >
-                      {busyKey === `delete-halaqa-${halaqa.id}` ? "جاري التحقق..." : "حذف نهائي"}
-                    </button>
-                  </div>
-                ) : (
+                <div className="mt-4 flex flex-col gap-2">
                   <button
-                    className="mt-4 min-h-11 w-full rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 text-sm font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:opacity-60"
+                    className="min-h-11 w-full rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-sm font-black text-[var(--primary)] transition hover:bg-[var(--primary)] hover:text-white disabled:opacity-60"
                     disabled={busyKey !== null}
-                    onClick={() => requestHalaqaStatusToggle(halaqa.id, "INACTIVE", halaqa.nameAr)}
+                    type="button"
+                    onClick={() =>
+                      setEditingHalaqa({
+                        id: halaqa.id,
+                        nameAr: halaqa.nameAr,
+                        stageId: halaqa.stage?.id || "",
+                        teacherUserId: halaqa.primaryTeacher?.id || "",
+                        weekdays: halaqa.weekdays,
+                        status: halaqa.status === "ACTIVE" ? "ACTIVE" : "INACTIVE",
+                        notes: halaqa.notes || "",
+                      })
+                    }
                   >
-                    {busyKey === `halaqa-${halaqa.id}` ? "جاري التحديث..." : "إيقاف الحلقة بدون حذف البيانات"}
+                    ✏️ تعديل بيانات الحلقة والأيام
                   </button>
-                )}
+
+                  {halaqa.status === "INACTIVE" ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        className="min-h-11 rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-3 text-sm font-black text-[var(--status-success-text)] transition hover:opacity-90 disabled:opacity-60"
+                        disabled={busyKey !== null}
+                        onClick={() => requestHalaqaStatusToggle(halaqa.id, "ACTIVE", halaqa.nameAr)}
+                      >
+                        {busyKey === `halaqa-${halaqa.id}` ? "جاري التحديث..." : "إعادة تفعيل الحلقة"}
+                      </button>
+                      <button
+                        className="min-h-11 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 text-sm font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:opacity-60"
+                        disabled={busyKey !== null}
+                        onClick={() => requestHalaqaPermanentDelete(halaqa.id, halaqa.nameAr)}
+                      >
+                        {busyKey === `delete-halaqa-${halaqa.id}` ? "جاري التحقق..." : "حذف نهائي"}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="min-h-11 w-full rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 text-sm font-black text-[var(--status-danger-text)] transition hover:opacity-90 disabled:opacity-60"
+                      disabled={busyKey !== null}
+                      onClick={() => requestHalaqaStatusToggle(halaqa.id, "INACTIVE", halaqa.nameAr)}
+                    >
+                      {busyKey === `halaqa-${halaqa.id}` ? "جاري التحديث..." : "إيقاف الحلقة بدون حذف البيانات"}
+                    </button>
+                  )}
+                </div>
               </article>
             )) : (
               <EmptyState text="لم تتم إضافة حلقات بعد." />
@@ -1019,7 +1238,17 @@ export function ManagementPanel({
       ) : activeTab === "students" ? (
         <div className="space-y-4">
           <SectionHint description="من هنا تدير بيانات الطلاب وتتابع ارتباطهم بالحلقات." />
-          <StudentManagementPanel students={data.students} halaqat={data.studentHalaqat} isOffline={isOffline} />
+          <StudentManagementPanel
+            students={data.students}
+            halaqat={data.studentHalaqat}
+            isOffline={isOffline}
+            onStudentsChange={(updater) =>
+              setData((prev) => ({
+                ...prev,
+                students: typeof updater === "function" ? updater(prev.students) : updater,
+              }))
+            }
+          />
         </div>
       ) : (
         <div className="space-y-4">
@@ -1542,6 +1771,148 @@ export function ManagementPanel({
                 {halaqaDeleteModal.loading ? "جاري الحذف..." : "حذف نهائي للحلقة والبيانات"}
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modal for Editing Halaqa & Weekdays */}
+      {editingHalaqa ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-6 shadow-2xl space-y-4 text-[var(--text-main)] max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <div>
+                <p className="text-xs font-bold text-[var(--gold)]">تعديل الحلقة</p>
+                <h3 className="text-lg font-black text-[var(--text-main)]">تعديل بيانات {editingHalaqa.nameAr}</h3>
+              </div>
+              <button
+                type="button"
+                className="text-sm font-black text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                onClick={() => setEditingHalaqa(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={editHalaqa} className="space-y-4">
+              <div>
+                <label className="form-label" htmlFor="edit-halaqa-name">اسم الحلقة</label>
+                <input
+                  id="edit-halaqa-name"
+                  className="form-control font-bold"
+                  value={editingHalaqa.nameAr}
+                  onChange={(e) => setEditingHalaqa((prev) => prev ? { ...prev, nameAr: e.target.value } : null)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="form-label" htmlFor="edit-halaqa-stage">المرحلة</label>
+                <select
+                  id="edit-halaqa-stage"
+                  className="form-control font-bold"
+                  value={editingHalaqa.stageId}
+                  onChange={(e) => setEditingHalaqa((prev) => prev ? { ...prev, stageId: e.target.value } : null)}
+                  required
+                >
+                  {data.stages.map((stage) => (
+                    <option key={stage.id} value={stage.id}>{stage.nameAr}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label" htmlFor="edit-halaqa-teacher">الشيخ المسؤول</label>
+                <select
+                  id="edit-halaqa-teacher"
+                  className="form-control font-bold"
+                  value={editingHalaqa.teacherUserId}
+                  onChange={(e) => setEditingHalaqa((prev) => prev ? { ...prev, teacherUserId: e.target.value } : null)}
+                  required
+                >
+                  <option value="">-- اختر الشيخ --</option>
+                  {activeTeachers.map((teacher) => (
+                    <option key={teacher.id} value={teacher.id}>{teacher.displayName}</option>
+                  ))}
+                </select>
+              </div>
+
+              <fieldset>
+                <legend className="form-label">أيام الحلقة</legend>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {WEEKDAY_CODES.map((weekday) => {
+                    const checked = editingHalaqa.weekdays.includes(weekday);
+                    return (
+                      <label
+                        key={weekday}
+                        className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition ${
+                          checked
+                            ? "border-[var(--primary)] bg-[var(--card-soft)] text-[var(--primary)]"
+                            : "border-[var(--border-color)] bg-[var(--card-bg)] text-[var(--text-muted)]"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-[var(--primary)]"
+                          checked={checked}
+                          onChange={() =>
+                            setEditingHalaqa((prev) => {
+                              if (!prev) return null;
+                              const updatedDays = prev.weekdays.includes(weekday)
+                                ? prev.weekdays.filter((d) => d !== weekday)
+                                : [...prev.weekdays, weekday];
+                              return { ...prev, weekdays: updatedDays };
+                            })
+                          }
+                        />
+                        {WEEKDAY_LABELS[weekday]}
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+
+              <div>
+                <label className="form-label" htmlFor="edit-halaqa-status">حالة الحلقة</label>
+                <select
+                  id="edit-halaqa-status"
+                  className="form-control font-bold"
+                  value={editingHalaqa.status}
+                  onChange={(e) => setEditingHalaqa((prev) => prev ? { ...prev, status: e.target.value as "ACTIVE" | "INACTIVE" } : null)}
+                  required
+                >
+                  <option value="ACTIVE">نشطة</option>
+                  <option value="INACTIVE">موقوفة</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label" htmlFor="edit-halaqa-notes">ملاحظات</label>
+                <textarea
+                  id="edit-halaqa-notes"
+                  className="form-control min-h-20 resize-y font-bold"
+                  value={editingHalaqa.notes}
+                  onChange={(e) => setEditingHalaqa((prev) => prev ? { ...prev, notes: e.target.value } : null)}
+                  placeholder="اختياري"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  className="min-h-11 rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-4 text-sm font-bold text-[var(--text-main)] hover:border-[var(--primary)]"
+                  onClick={() => setEditingHalaqa(null)}
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="min-h-11 rounded-xl bg-[var(--primary)] px-5 text-sm font-black text-white hover:bg-[var(--primary-dark)] disabled:opacity-60"
+                  disabled={busyKey === `edit-halaqa-${editingHalaqa.id}`}
+                >
+                  {busyKey === `edit-halaqa-${editingHalaqa.id}` ? "جاري الحفظ..." : "حفظ التعديلات"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       ) : null}
