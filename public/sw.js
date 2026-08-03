@@ -2,7 +2,7 @@ const CACHE_NAME = "mutaqin-offline-shell-v14";
 const STATIC_ASSETS = [
   "/offline-shell.html",
   "/manifest.json",
-  "/brand/logo.png",
+  "/brand/logo-light.png",
   "/icon-192.png",
   "/icon-512.png",
 ];

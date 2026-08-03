@@ -140,7 +140,7 @@ export function renderMonthlyReportHtml(report: MonthlyReportData): string {
     timeZone: "Asia/Hebron",
   }).format(new Date(report.generatedAt));
 
-  const logoSrc = getReportLogoBase64() || "/brand/logo.png";
+  const logoSrc = getReportLogoBase64() || "/brand/logo-light.png";
 
   return `<!doctype html>
 <html lang="ar" dir="rtl">

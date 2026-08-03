@@ -7,7 +7,7 @@ export function getReportLogoBase64(): string {
   if (cachedLogoBase64) return cachedLogoBase64;
 
   try {
-    const logoPath = path.join(process.cwd(), "public", "brand", "logo.png");
+    const logoPath = path.join(process.cwd(), "public", "brand", "logo-light.png");
     if (existsSync(logoPath)) {
       const buffer = readFileSync(logoPath);
       cachedLogoBase64 = `data:image/png;base64,${buffer.toString("base64")}`;

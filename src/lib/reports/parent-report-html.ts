@@ -2,7 +2,7 @@ import type { ParentReportData } from "@/lib/reports/parent-report-types";
 import { getReportLogoBase64 } from "@/lib/reports/report-logo";
 
 export function generateParentReportHtml(data: ParentReportData): string {
-  const logoSrc = getReportLogoBase64() || "/brand/logo.png";
+  const logoSrc = getReportLogoBase64() || "/brand/logo-light.png";
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
