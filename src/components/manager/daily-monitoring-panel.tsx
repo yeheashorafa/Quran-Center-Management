@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { WEEKDAY_CODES, WEEKDAY_LABELS, type WeekdayCode } from "@/lib/halaqat/weekdays";
 import type {
   ManagerDailyHalaqaMonitoringItem,
   ManagerDailyMonitoringData,
@@ -21,6 +23,9 @@ const STATUS_STYLES: Record<MonitoringSessionStatus, string> = {
   LOCKED: "border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-muted)]",
 };
 
+type ScheduleScopeFilter = "all_unrecorded" | "scheduled_today" | "all_active";
+type StatusFilter = "ALL" | "NOT_RECORDED" | "DRAFT" | "COMPLETED";
+
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
   return new Intl.DateTimeFormat("ar-PS", {
@@ -39,12 +44,49 @@ export function DailyMonitoringPanel({
 }: {
   initialData: ManagerDailyMonitoringData;
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [data, setData] = useState(initialData);
   const [date, setDate] = useState(initialData.date);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const [exportingFormat, setExportingFormat] = useState<"excel" | "csv" | null>(null);
+
+  // URL state reading
+  const rawFilter = searchParams.get("monitoringFilter");
+  const scheduleScopeFilter: ScheduleScopeFilter =
+    rawFilter === "scheduled_today" || rawFilter === "all_active"
+      ? rawFilter
+      : "all_unrecorded";
+
+  const statusFilter: StatusFilter =
+    (searchParams.get("monitoringStatus") as StatusFilter) || "ALL";
+
+  const dayFilter = searchParams.get("monitoringDay") || "ALL";
+  const stageFilter = searchParams.get("monitoringStage") || "ALL";
+  const searchQuery = searchParams.get("monitoringSearch") || "";
+  const rawPage = parseInt(searchParams.get("monitoringPage") || "1", 10);
+  const pageFromUrl = isNaN(rawPage) || rawPage < 1 ? 1 : rawPage;
+
+  function updateUrlParams(updates: Record<string, string | null>, resetPage = true) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "monitoring");
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null || value === "" || value === "ALL") {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+    }
+
+    if (resetPage && !updates.monitoringPage) {
+      params.set("monitoringPage", "1");
+    }
+
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
 
   function downloadExport(format: "excel" | "csv") {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -93,14 +135,74 @@ export function DailyMonitoringPanel({
     }
   }
 
-  const attendanceTotal =
-    data.summary.attendance.present +
-    data.summary.attendance.absent +
-    data.summary.attendance.excused +
-    data.summary.attendance.notHeard;
-  const attendanceRate = attendanceTotal
-    ? Math.round((data.summary.attendance.present / attendanceTotal) * 100)
-    : 0;
+  // Available stages for dropdown filter
+  const availableStages = useMemo(() => {
+    const set = new Set<string>();
+    for (const h of data.halaqat) {
+      if (h.stageName) set.add(h.stageName);
+    }
+    return Array.from(set);
+  }, [data.halaqat]);
+
+  // Combined Filtering Logic
+  const filteredHalaqat = useMemo(() => {
+    return data.halaqat.filter((halaqa) => {
+      // 1. Schedule Scope Filter
+      if (scheduleScopeFilter === "all_unrecorded") {
+        if (halaqa.monitoringStatus !== "NOT_RECORDED") return false;
+      } else if (scheduleScopeFilter === "scheduled_today") {
+        if (!halaqa.isScheduledToday) return false;
+      }
+
+      // 2. Status Filter
+      if (statusFilter === "NOT_RECORDED" && halaqa.monitoringStatus !== "NOT_RECORDED") return false;
+      if (statusFilter === "DRAFT" && halaqa.monitoringStatus !== "DRAFT") return false;
+      if (
+        statusFilter === "COMPLETED" &&
+        halaqa.monitoringStatus !== "COMPLETED" &&
+        halaqa.monitoringStatus !== "LOCKED"
+      )
+        return false;
+
+      // 3. Day Filter
+      if (dayFilter !== "ALL") {
+        if (!halaqa.weekdays?.includes(dayFilter as WeekdayCode)) return false;
+      }
+
+      // 4. Stage Filter
+      if (stageFilter !== "ALL") {
+        if (halaqa.stageName !== stageFilter) return false;
+      }
+
+      // 5. Search Query
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchName = halaqa.nameAr.toLowerCase().includes(q);
+        const matchTeacher = halaqa.teacher?.displayName.toLowerCase().includes(q) ?? false;
+        const matchStage = halaqa.stageName.toLowerCase().includes(q);
+        if (!matchName && !matchTeacher && !matchStage) return false;
+      }
+
+      return true;
+    });
+  }, [data.halaqat, scheduleScopeFilter, statusFilter, dayFilter, stageFilter, searchQuery]);
+
+  // Pagination Math
+  const ITEMS_PER_PAGE = 5;
+  const totalCount = filteredHalaqat.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
+  const currentPage = Math.min(Math.max(1, pageFromUrl), totalPages);
+
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedHalaqat = filteredHalaqat.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  const fromDisplay = totalCount === 0 ? 0 : startIndex + 1;
+  const toDisplay = Math.min(startIndex + ITEMS_PER_PAGE, totalCount);
+
+  function handlePageChange(newPage: number) {
+    if (newPage < 1 || newPage > totalPages) return;
+    updateUrlParams({ monitoringPage: String(newPage) }, false);
+  }
 
   return (
     <div className="space-y-5" dir="rtl">
@@ -186,7 +288,7 @@ export function DailyMonitoringPanel({
         </section>
       ) : null}
 
-      {/* Unrecorded Halaqat Priority Alert Box */}
+      {/* Unrecorded Scheduled Halaqat Priority Alert Box */}
       {data.summary.notRecordedHalaqat > 0 ? (
         <section className="rounded-3xl border-2 border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -196,7 +298,7 @@ export function DailyMonitoringPanel({
               </span>
               <div>
                 <h3 className="text-base font-black text-[var(--status-danger-text)]">
-                  تنبيه: يوجد ({data.summary.notRecordedHalaqat}) حلقة لم تسجّل التسميع لهذا اليوم!
+                  تنبيه: يوجد ({data.summary.notRecordedHalaqat}) حلقة مجدولة اليوم لم تسجّل التسميع بعد!
                 </h3>
                 <p className="mt-0.5 text-xs font-bold text-[var(--text-muted)]">
                   نرجو التواصل مع الشيوخ المسؤولين لتسجيل الجلسة ومزامنتها مع الخادم.
@@ -223,38 +325,211 @@ export function DailyMonitoringPanel({
         </section>
       )}
 
+      {/* Metric Cards Summary */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-        <MetricCard value={data.summary.expectedHalaqat} label="حلقة مطلوبة" />
-        <MetricCard value={data.summary.recordedHalaqat} label="بدأت التسجيل" />
-        <MetricCard value={data.summary.completedHalaqat} label="جلسة مكتملة" />
-        <MetricCard value={data.summary.notRecordedHalaqat} label="لم تسجّل" danger />
+        <MetricCard value={data.summary.expectedHalaqat} label="مجدولة اليوم" />
+        <MetricCard value={data.summary.recordedHalaqat} label="بدأت التسجيل اليوم" />
+        <MetricCard value={data.summary.completedHalaqat} label="جلسة مكتملة اليوم" />
+        <MetricCard value={data.summary.notRecordedHalaqat} label="مجدولة ولم تسجّل" danger={data.summary.notRecordedHalaqat > 0} />
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <MetricCard value={data.summary.totalActiveHalaqat ?? data.halaqat.length} label="إجمالي الحلقات النشطة" />
+        <MetricCard value={data.summary.totalUnrecordedActiveHalaqat ?? data.halaqat.filter(h => h.monitoringStatus === "NOT_RECORDED").length} label="إجمالي غير المسجلة" danger />
         <MetricCard value={`${data.summary.recordedStudents}/${data.summary.expectedStudents}`} label="طلاب مسجّلون" />
-        <MetricCard value={`${attendanceRate}%`} label="نسبة الحضور" />
-        <MetricCard value={data.summary.attendance.absent} label="غياب" danger />
         <MetricCard value={pages(data.summary.activities.totalPages)} label="إجمالي الصفحات" />
       </div>
 
-      <section className="space-y-3">
-        <div className="flex items-end justify-between gap-3">
+      {/* Filtering & Monitoring Controls Section */}
+      <section className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-bold text-[var(--gold)]">تفاصيل اليوم</p>
-            <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">الحلقات المجدولة</h2>
+            <h3 className="text-lg font-black text-[var(--text-main)]">تصفية وفلترة قائمة الحلقات</h3>
+            <p className="text-xs text-[var(--text-muted)]">اختر نطاق العرض والفلترة المطلوبة لمتابعة تسجيل الشيوخ للحلقات.</p>
           </div>
-          <span className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-3 py-1 text-xs font-black text-[var(--primary)]">
-            {data.halaqat.length}
-          </span>
+
+          {/* Schedule Scope Filter Tabs */}
+          <div className="flex flex-wrap gap-1.5 rounded-2xl bg-[var(--card-soft)] p-1.5 border border-[var(--border-color)]">
+            <button
+              type="button"
+              onClick={() => updateUrlParams({ monitoringFilter: "all_unrecorded" })}
+              className={`rounded-xl px-3 py-1.5 text-xs font-black transition ${
+                scheduleScopeFilter === "all_unrecorded"
+                  ? "bg-[var(--primary)] text-white shadow-xs"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              }`}
+            >
+              كل الحلقات غير المسجلة اليوم ({data.summary.totalUnrecordedActiveHalaqat ?? data.halaqat.filter(h => h.monitoringStatus === "NOT_RECORDED").length})
+            </button>
+            <button
+              type="button"
+              onClick={() => updateUrlParams({ monitoringFilter: "scheduled_today" })}
+              className={`rounded-xl px-3 py-1.5 text-xs font-black transition ${
+                scheduleScopeFilter === "scheduled_today"
+                  ? "bg-[var(--primary)] text-white shadow-xs"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              }`}
+            >
+              المجدولة اليوم ({data.summary.expectedHalaqat})
+            </button>
+            <button
+              type="button"
+              onClick={() => updateUrlParams({ monitoringFilter: "all_active" })}
+              className={`rounded-xl px-3 py-1.5 text-xs font-black transition ${
+                scheduleScopeFilter === "all_active"
+                  ? "bg-[var(--primary)] text-white shadow-xs"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              }`}
+            >
+              جميع الحلقات النشطة ({data.halaqat.length})
+            </button>
+          </div>
         </div>
 
-        {data.halaqat.length ? (
-          data.halaqat.map((halaqa) => <HalaqaMonitoringCard key={halaqa.id} halaqa={halaqa} />)
+        {/* Detailed Filters Grid */}
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 pt-2 border-t border-[var(--border-color)]">
+          {/* Day Filter */}
+          <div>
+            <label className="text-[11px] font-bold text-[var(--text-muted)] mb-1 block">فلتر أيام الحلقة</label>
+            <select
+              className="form-control text-xs"
+              value={dayFilter}
+              onChange={(e) => updateUrlParams({ monitoringDay: e.target.value })}
+            >
+              <option value="ALL">جميع الأيام</option>
+              {WEEKDAY_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {WEEKDAY_LABELS[code]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status Filter */}
+          <div>
+            <label className="text-[11px] font-bold text-[var(--text-muted)] mb-1 block">حالة الجلسة</label>
+            <select
+              className="form-control text-xs"
+              value={statusFilter}
+              onChange={(e) => updateUrlParams({ monitoringStatus: e.target.value })}
+            >
+              <option value="ALL">جميع الحالات</option>
+              <option value="NOT_RECORDED">لم يسجّل</option>
+              <option value="DRAFT">مسودة / غير مكتملة</option>
+              <option value="COMPLETED">مكتملة / مقفلة</option>
+            </select>
+          </div>
+
+          {/* Stage Filter */}
+          <div>
+            <label className="text-[11px] font-bold text-[var(--text-muted)] mb-1 block">المرحلة</label>
+            <select
+              className="form-control text-xs"
+              value={stageFilter}
+              onChange={(e) => updateUrlParams({ monitoringStage: e.target.value })}
+            >
+              <option value="ALL">جميع المراحل</option>
+              {availableStages.map((stage) => (
+                <option key={stage} value={stage}>
+                  {stage}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Search Query */}
+          <div>
+            <label className="text-[11px] font-bold text-[var(--text-muted)] mb-1 block">بحث بالشيخ أو الحلقة</label>
+            <input
+              type="search"
+              placeholder="ابحث باسم الحلقة أو الشيخ..."
+              className="form-control text-xs"
+              value={searchQuery}
+              onChange={(e) => updateUrlParams({ monitoringSearch: e.target.value })}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Halaqat Cards Section & Pagination */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold text-[var(--gold)]">
+              {scheduleScopeFilter === "all_unrecorded"
+                ? "كل الحلقات غير المسجلة"
+                : scheduleScopeFilter === "scheduled_today"
+                ? "الحلقات المجدولة اليوم ولم تسجل"
+                : "جميع الحلقات النشطة"}
+            </p>
+            <h2 className="mt-0.5 text-xl font-black text-[var(--text-main)]">
+              قائمة المتابعة اليومية
+            </h2>
+          </div>
+
+          {/* Pagination Counter Info */}
+          <div className="rounded-full bg-[var(--card-soft)] border border-[var(--border-color)] px-4 py-1.5 text-xs font-black text-[var(--primary)]">
+            عرض {fromDisplay} - {toDisplay} من أصل {totalCount} حلقة
+          </div>
+        </div>
+
+        {paginatedHalaqat.length ? (
+          <div className="space-y-3">
+            {paginatedHalaqat.map((halaqa) => (
+              <HalaqaMonitoringCard key={halaqa.id} halaqa={halaqa} />
+            ))}
+          </div>
         ) : (
-          <div className="rounded-3xl border border-dashed border-[var(--border-color)] bg-[var(--card-bg)] p-8 text-center text-sm font-bold text-[var(--text-muted)]">
-            لا توجد حلقات مجدولة في هذا اليوم حسب الجداول الحالية.
+          <div className="rounded-3xl border border-dashed border-[var(--border-color)] bg-[var(--card-bg)] p-8 text-center text-sm font-bold text-[var(--text-muted)] space-y-2">
+            <p className="text-2xl">🔍</p>
+            <p>لا توجد حلقات مطابقة للفلاتر المحددة حالياً.</p>
+            <p className="text-xs text-[var(--text-muted)]">جرّب تغيير خيارات التصفية أو إلغاء بعض الفلاتر لعرض نتائج أكثر.</p>
           </div>
         )}
+
+        {/* Pagination Toolbar */}
+        {totalPages > 1 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[var(--border-color)]">
+            <div className="text-xs font-bold text-[var(--text-muted)]">
+              الصفحة {currentPage} من أصل {totalPages}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage <= 1}
+                className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-3 py-1.5 text-xs font-black text-[var(--text-main)] transition hover:bg-[var(--card-bg)] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                السابق
+              </button>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => handlePageChange(pageNum)}
+                  className={`size-8 rounded-xl text-xs font-black transition ${
+                    pageNum === currentPage
+                      ? "bg-[var(--primary)] text-white shadow-xs"
+                      : "border border-[var(--border-color)] bg-[var(--card-soft)] text-[var(--text-main)] hover:bg-[var(--card-bg)]"
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages}
+                className="rounded-xl border border-[var(--border-color)] bg-[var(--card-soft)] px-3 py-1.5 text-xs font-black text-[var(--text-main)] transition hover:bg-[var(--card-bg)] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                التالي
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
     </div>
   );
@@ -265,23 +540,53 @@ function HalaqaMonitoringCard({ halaqa }: { halaqa: ManagerDailyHalaqaMonitoring
     ? Math.round((halaqa.recordedStudents / halaqa.expectedStudents) * 100)
     : 0;
 
+  const formattedWeekdays = halaqa.weekdays && halaqa.weekdays.length > 0
+    ? halaqa.weekdays.map((w) => WEEKDAY_LABELS[w] || w).join("، ")
+    : "غير محددة";
+
   return (
     <article className="rounded-3xl border border-[var(--border-color)] bg-[var(--card-bg)] p-4 shadow-sm sm:p-5 text-[var(--text-main)] transition-colors duration-200">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-lg font-black text-[var(--text-main)]">{halaqa.nameAr}</h3>
+
+            {/* Registration Status Badge */}
             <span className={`rounded-full border px-3 py-1 text-[10px] font-black ${STATUS_STYLES[halaqa.monitoringStatus]}`}>
               {STATUS_LABELS[halaqa.monitoringStatus]}
             </span>
+
+            {/* Scheduled Today vs Not Scheduled Visual Distinction Badge */}
+            {halaqa.isScheduledToday ? (
+              halaqa.monitoringStatus === "NOT_RECORDED" ? (
+                <span className="rounded-full border border-red-300 dark:border-red-800 bg-red-100 dark:bg-red-950/40 px-3 py-1 text-[10px] font-black text-red-700 dark:text-red-300">
+                  ⚠️ مطلوبة اليوم
+                </span>
+              ) : (
+                <span className="rounded-full border border-blue-300 dark:border-blue-800 bg-blue-100 dark:bg-blue-950/40 px-3 py-1 text-[10px] font-black text-blue-700 dark:text-blue-300">
+                  📅 مجدولة اليوم
+                </span>
+              )
+            ) : (
+              <span className="rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-3 py-1 text-[10px] font-black text-slate-600 dark:text-slate-400">
+                ☕ غير مجدولة اليوم
+              </span>
+            )}
           </div>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            {halaqa.stageName} — الشيخ: {halaqa.teacher?.displayName ?? "لا يوجد شيخ معيّن"}
+
+          <p className="mt-1.5 text-sm text-[var(--text-muted)]">
+            المرحلة: <strong className="text-[var(--text-main)]">{halaqa.stageName}</strong> — الشيخ: <strong className="text-[var(--text-main)]">{halaqa.teacher?.displayName ?? "لا يوجد شيخ معيّن"}</strong>
           </p>
+
+          <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+            أيام الحلقة: <strong className="text-[var(--primary)]">{formattedWeekdays}</strong>
+          </p>
+
           {halaqa.teacher && halaqa.teacher.status !== "ACTIVE" ? (
             <p className="mt-1 text-xs font-bold text-[var(--status-danger-text)]">حساب الشيخ غير نشط حالياً.</p>
           ) : null}
         </div>
+
         <div className="text-left">
           <div className="text-2xl font-black text-[var(--primary)]">{progress}%</div>
           <div className="text-[11px] font-bold text-[var(--text-muted)]">اكتمال التسجيل</div>
@@ -295,17 +600,21 @@ function HalaqaMonitoringCard({ halaqa }: { halaqa: ManagerDailyHalaqaMonitoring
       <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Info label="المطلوب" value={`${halaqa.expectedStudents} طالب`} />
         <Info label="تم تسجيلهم" value={`${halaqa.recordedStudents} طالب`} />
-        <Info label="المتبقي" value={`${halaqa.remainingStudents} طالب`} danger={halaqa.remainingStudents > 0} />
+        <Info label="المتبقي" value={`${halaqa.remainingStudents} طالب`} danger={halaqa.remainingStudents > 0 && halaqa.isScheduledToday} />
         <Info label="تحديث الخادم" value={formatDateTime(halaqa.session?.updatedAt ?? null)} />
       </dl>
 
-      {/* Last Synced Session Info Header */}
+      {/* Last Synced Session Info */}
       {halaqa.lastSyncedSession ? (
         <div className="mt-3 rounded-2xl bg-[var(--card-soft)] p-2.5 text-xs font-bold text-[var(--text-main)] flex flex-wrap justify-between items-center border border-[var(--border-color)]">
           <span>آخر يوم تم تسجيله ووصل للسيرفر: <strong className="text-[var(--primary)]">{halaqa.lastSyncedSession.sessionDate}</strong></span>
           <span className="text-[var(--text-muted)]">وقت المزامنة: {formatDateTime(halaqa.lastSyncedSession.updatedAt)}</span>
         </div>
-      ) : null}
+      ) : (
+        <div className="mt-3 rounded-2xl bg-[var(--card-soft)] p-2.5 text-xs font-bold text-[var(--text-muted)] border border-[var(--border-color)]">
+          لم يتم تسجيل أي جلسة لهذه الحلقة على الخادم بعد.
+        </div>
+      )}
 
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <div className="rounded-2xl bg-[var(--card-soft)] p-3 border border-[var(--border-color)]">

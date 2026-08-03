@@ -29,6 +29,8 @@ export type ManagerDailyHalaqaMonitoringItem = {
   recordedStudents: number;
   remainingStudents: number;
   monitoringStatus: MonitoringSessionStatus;
+  isScheduledToday: boolean;
+  weekdays: WeekdayCode[];
   session: {
     id: string;
     status: "DRAFT" | "COMPLETED" | "LOCKED";
@@ -54,6 +56,8 @@ export type ManagerDailyMonitoringData = {
     completedHalaqat: number;
     draftHalaqat: number;
     notRecordedHalaqat: number;
+    totalActiveHalaqat: number;
+    totalUnrecordedActiveHalaqat: number;
     expectedStudents: number;
     recordedStudents: number;
     attendance: MonitoringAttendanceSummary;

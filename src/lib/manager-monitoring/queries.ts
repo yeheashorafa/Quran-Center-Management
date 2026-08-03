@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db/prisma";
 import { dateOnlyToUtc, weekdayFromDateOnly } from "@/lib/memorization-sessions/date";
-import { WEEKDAY_LABELS } from "@/lib/halaqat/weekdays";
+import { sortWeekdays, WEEKDAY_LABELS, type WeekdayCode } from "@/lib/halaqat/weekdays";
 import type {
   ManagerDailyHalaqaMonitoringItem,
   ManagerDailyMonitoringData,
@@ -51,19 +51,22 @@ export async function getManagerDailyMonitoringData(
         status: "ACTIVE",
         deletedAt: null,
       },
-      schedules: {
-        some: {
-          weekday,
-          effectiveFrom: { lte: date },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: date } }],
-        },
-      },
+      OR: [{ stageId: null }, { stage: { isActive: true } }],
     },
     orderBy: [{ stage: { sortOrder: "asc" } }, { nameAr: "asc" }],
     select: {
       id: true,
       nameAr: true,
       stage: { select: { nameAr: true } },
+      schedules: {
+        where: {
+          effectiveFrom: { lte: date },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: date } }],
+        },
+        select: {
+          weekday: true,
+        },
+      },
       staffAssignments: {
         where: {
           role: "PRIMARY_TEACHER",
@@ -136,6 +139,11 @@ export async function getManagerDailyMonitoringData(
   }> = [];
 
   const mappedHalaqat: ManagerDailyHalaqaMonitoringItem[] = halaqat.map((halaqa) => {
+    const activeWeekdays = sortWeekdays(
+      halaqa.schedules.map((s) => s.weekday as WeekdayCode),
+    );
+    const isScheduledToday = activeWeekdays.includes(weekday);
+
     const session = halaqa.sessions[0] ?? null;
     const attendance = emptyAttendance();
     const activities = emptyActivities();
@@ -212,6 +220,8 @@ export async function getManagerDailyMonitoringData(
       recordedStudents: safeRecordedStudents,
       remainingStudents: Math.max(expectedStudents - safeRecordedStudents, 0),
       monitoringStatus,
+      isScheduledToday,
+      weekdays: activeWeekdays,
       session: session
         ? {
             id: session.id,
@@ -234,19 +244,25 @@ export async function getManagerDailyMonitoringData(
     addActivities(totalActivities, halaqa.activities);
   }
 
+  const scheduledHalaqat = mappedHalaqat.filter((h) => h.isScheduledToday);
+
   return {
     date: dateValue,
     weekday,
     weekdayLabel: WEEKDAY_LABELS[weekday],
     summary: {
-      expectedHalaqat: mappedHalaqat.length,
-      recordedHalaqat: mappedHalaqat.filter((halaqa) => halaqa.monitoringStatus !== "NOT_RECORDED")
+      expectedHalaqat: scheduledHalaqat.length,
+      recordedHalaqat: scheduledHalaqat.filter((halaqa) => halaqa.monitoringStatus !== "NOT_RECORDED")
         .length,
-      completedHalaqat: mappedHalaqat.filter(
+      completedHalaqat: scheduledHalaqat.filter(
         (halaqa) => halaqa.monitoringStatus === "COMPLETED" || halaqa.monitoringStatus === "LOCKED",
       ).length,
-      draftHalaqat: mappedHalaqat.filter((halaqa) => halaqa.monitoringStatus === "DRAFT").length,
-      notRecordedHalaqat: mappedHalaqat.filter(
+      draftHalaqat: scheduledHalaqat.filter((halaqa) => halaqa.monitoringStatus === "DRAFT").length,
+      notRecordedHalaqat: scheduledHalaqat.filter(
+        (halaqa) => halaqa.monitoringStatus === "NOT_RECORDED",
+      ).length,
+      totalActiveHalaqat: mappedHalaqat.length,
+      totalUnrecordedActiveHalaqat: mappedHalaqat.filter(
         (halaqa) => halaqa.monitoringStatus === "NOT_RECORDED",
       ).length,
       expectedStudents: mappedHalaqat.reduce(
