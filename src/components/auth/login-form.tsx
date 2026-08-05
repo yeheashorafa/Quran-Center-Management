@@ -17,6 +17,7 @@ import {
   type OfflineTeacherProfile,
 } from "@/lib/offline/offline-profile";
 import { getManagerDataCache } from "@/lib/offline/manager-cache";
+import { PwaInstallSection } from "@/components/pwa/pwa-install-section";
 
 function LockIcon() {
   return (
@@ -304,6 +305,8 @@ export function LoginForm() {
             </a>
           </div>
         )}
+
+        <PwaInstallSection />
       </div>
     );
   }
@@ -549,6 +552,8 @@ export function LoginForm() {
           "تسجيل الدخول للنظام"
         )}
       </button>
+
+      <PwaInstallSection />
     </form>
   );
 }

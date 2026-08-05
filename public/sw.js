@@ -1,4 +1,4 @@
-const CACHE_NAME = "mutaqin-offline-shell-v14";
+const CACHE_NAME = "mutaqin-offline-shell-v16";
 const STATIC_ASSETS = [
   "/offline-shell.html",
   "/manifest.json",
