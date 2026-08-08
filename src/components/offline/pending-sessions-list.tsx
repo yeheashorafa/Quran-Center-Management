@@ -7,8 +7,11 @@ import {
   retryFailedSyncItems,
   deleteSyncItem,
   processSyncQueue,
+  exportOfflineBackupData,
+  downloadBackupJsonFile,
   type SyncQueueItem,
 } from "@/lib/offline/sync-queue";
+import { PendingDiagnosticsModal } from "./pending-diagnostics-modal";
 
 export function PendingSessionsList({
   items,
@@ -21,6 +24,7 @@ export function PendingSessionsList({
   const [notice, setNotice] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
+  const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -65,6 +69,16 @@ export function PendingSessionsList({
       setNotice("لا توجد عمليات معلقة للمزامنة.");
     }
   }, [onRefresh]);
+
+  async function handleExportBackup() {
+    try {
+      const backup = await exportOfflineBackupData();
+      downloadBackupJsonFile(backup);
+      setNotice("✅ تم تنزيل النسخة الاحتياطية (JSON) بنجاح.");
+    } catch {
+      setNotice("⚠️ تعذر إنشاء النسخة الاحتياطية.");
+    }
+  }
 
   async function handleDeleteSingle(queueId: string) {
     if (confirm("هل أنت متأكد من حذف هذه العملية المعلقة؟ لن يتم رفع بياناتها للسيرفر.")) {
@@ -122,6 +136,14 @@ export function PendingSessionsList({
             {syncing ? "جاري المزامنة..." : "🔄 مزامنة الآن"}
           </button>
 
+          <button
+            type="button"
+            onClick={() => setShowDiagnosticsModal(true)}
+            className="rounded-2xl border border-[var(--primary)]/30 bg-[var(--card-bg)] px-4 py-2 text-xs font-black text-[var(--primary)] transition hover:bg-[var(--card-soft)]"
+          >
+            🔍 فحص العمليات المعلقة
+          </button>
+
           {hasFailedOrConflict ? (
             <button
               type="button"
@@ -152,11 +174,18 @@ export function PendingSessionsList({
               <h3 className="text-lg font-black">تحذير: مسح العمليات المعلقة</h3>
             </div>
 
-            <p className="text-xs font-bold leading-relaxed text-[var(--text-muted)]">
-              هذه العمليات لم تتم مزامنتها بعد. إذا حذفتها ستفقد البيانات المحفوظة محلياً ولن يتم رفعها للسيرفر. هل أنت متأكد؟
+            <p className="text-xs font-bold leading-relaxed text-[var(--status-danger-text)] bg-[var(--status-danger-bg)] p-3 rounded-2xl border border-[var(--status-danger-border)]">
+              ⚠️ قد تفقد بيانات لم تتم مزامنتها بعد مع السيرفر! يُنصح بشدة بتصدير نسخة احتياطية أولاً قبل المسح.
             </p>
 
             <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => void handleExportBackup()}
+                className="w-full rounded-2xl bg-emerald-700 dark:bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-md hover:bg-emerald-800"
+              >
+                📥 تصدير نسخة احتياطية من العمليات أولاً (JSON Backup)
+              </button>
               <button
                 type="button"
                 onClick={() => void handleClearFailed()}
@@ -181,6 +210,17 @@ export function PendingSessionsList({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {/* Diagnostics Inspection Modal */}
+      {showDiagnosticsModal ? (
+        <PendingDiagnosticsModal
+          items={items}
+          onClose={() => setShowDiagnosticsModal(false)}
+          onRefresh={() => {
+            onRefresh?.();
+          }}
+        />
       ) : null}
 
       {notice ? (
